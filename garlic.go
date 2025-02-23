@@ -59,6 +59,19 @@ func (g *Garlic) addrString(addr string) string {
 
 func (g *Garlic) String() string {
 	var r string
+	if g.ServiceKeys == nil {
+		if g.StreamSession != nil {
+			k := g.StreamSession.Keys()
+			g.ServiceKeys = &k
+		}
+		if g.DatagramSession != nil {
+			k := g.StreamSession.Keys()
+			g.ServiceKeys = &k
+		}
+		if g.ServiceKeys == nil {
+			return ""
+		}
+	}
 	switch g.AddrMode {
 	case DEST_HASH:
 		r = g.ServiceKeys.Address.DestHash().Hash()
@@ -288,11 +301,10 @@ func (g *Garlic) ListenTLS(args ...string) (net.Listener, error) {
 		// if args[0] == "tcp" || args[0] == "tcp6" || args[0] == "st" || args[0] == "st6" {
 		if protocol == "tcp" || protocol == "tcp6" || protocol == "st" || protocol == "st6" {
 			log.Debug("Creating TLS stream listener")
+			tlsConfig := tlsConfig(cert)
 			return tls.NewListener(
 				g.StreamListener,
-				&tls.Config{
-					Certificates: []tls.Certificate{cert},
-				},
+				tlsConfig,
 			), nil
 			//} else if args[0] == "udp" || args[0] == "udp6" || args[0] == "dg" || args[0] == "dg6" {
 		} else if protocol == "udp" || protocol == "udp6" || protocol == "dg" || protocol == "dg6" {
@@ -316,6 +328,24 @@ func (g *Garlic) ListenTLS(args ...string) (net.Listener, error) {
 			Certificates: []tls.Certificate{cert},
 		},
 	), nil
+}
+
+func tlsConfig(cert tls.Certificate) *tls.Config {
+	x := &tls.Config{
+		Certificates: []tls.Certificate{cert},
+	}
+	return x
+}
+
+// TLSConfig returns the TLS config for the Garlic structure.
+// it will return a TLS config even if a service is not currently using TLS.
+func (g *Garlic) TLSConfig() (*tls.Config, error) {
+	cert, err := g.TLSKeys()
+	if err != nil {
+		log.WithError(err).Error("Failed to get TLS keys")
+		return nil, fmt.Errorf("onramp TLSConfig: %v", err)
+	}
+	return tlsConfig(cert), nil
 }
 
 // Dial returns a net.Conn for the Garlic structure's I2P keys.
