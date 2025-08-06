@@ -5,7 +5,7 @@ import (
 )
 
 var (
-	log  *logger.Logger
+	log *logger.Logger
 )
 
 func InitializeOnrampLogger() {
@@ -19,5 +19,5 @@ func GetOnrampLogger() *logger.Logger {
 }
 
 func init() {
-	GetOnrampLogger()
+	log = GetOnrampLogger()
 }
