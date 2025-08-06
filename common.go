@@ -10,8 +10,11 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/go-i2p/logger"
 	"github.com/sirupsen/logrus"
 )
+
+var log = logger.GetGoI2PLogger()
 
 //go:generate go run -tags gen ./gen.go
 

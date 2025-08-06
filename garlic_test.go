@@ -6,7 +6,7 @@ package onramp
 import (
 	"crypto/tls"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 	"testing"
@@ -52,7 +52,7 @@ func TestBareGarlic(t *testing.T) {
 	}
 	defer resp.Body.Close()
 	fmt.Println(resp.Status)
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Error(err)
 	}

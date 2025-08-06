@@ -6,7 +6,7 @@ package onramp
 import (
 	"crypto/tls"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"testing"
 )
@@ -44,7 +44,7 @@ func TestBareOnion(t *testing.T) {
 		t.Error(err)
 	}
 	fmt.Println("Status:", resp.Status)
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Error(err)
 	}
