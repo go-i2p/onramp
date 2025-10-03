@@ -22,29 +22,31 @@ var log = logger.GetGoI2PLogger()
 func GetJoinedWD(dir string) (string, error) {
 	wd, err := os.Getwd()
 	if err != nil {
-		//log.WithError(err).Error("Failed to get working directory")
+		// log.WithError(err).Error("Failed to get working directory")
 		return "", err
 	}
 	jwd := filepath.Join(wd, dir)
 	ajwd, err := filepath.Abs(jwd)
 	if err != nil {
-		//log.WithError(err).WithField("path", jwd).Error("Failed to get absolute path")
+		// log.WithError(err).WithField("path", jwd).Error("Failed to get absolute path")
 		return "", err
 	}
 	if _, err := os.Stat(ajwd); err != nil {
-		//log.WithField("path", ajwd).Debug("Directory does not exist, creating")
-		if err := os.MkdirAll(ajwd, 0755); err != nil {
-			//log.WithError(err).WithField("path", ajwd).Error("Failed to create directory")
+		// log.WithField("path", ajwd).Debug("Directory does not exist, creating")
+		if err := os.MkdirAll(ajwd, 0o755); err != nil {
+			// log.WithError(err).WithField("path", ajwd).Error("Failed to create directory")
 			return "", err
 		}
 	}
-	//log.WithField("path", ajwd).Debug("Successfully got joined working directory")
+	// log.WithField("path", ajwd).Debug("Successfully got joined working directory")
 	return ajwd, nil
 }
 
-var i2pdefault, i2pkserr = GetJoinedWD("i2pkeys")
-var tordefault, torkserr = GetJoinedWD("onionkeys")
-var tlsdefault, tlskserr = GetJoinedWD("tlskeys")
+var (
+	i2pdefault, i2pkserr = GetJoinedWD("i2pkeys")
+	tordefault, torkserr = GetJoinedWD("onionkeys")
+	tlsdefault, tlskserr = GetJoinedWD("tlskeys")
+)
 
 // I2P_KEYSTORE_PATH is the place where I2P Keys will be saved.
 // it defaults to the directory "i2pkeys" current working directory.
@@ -68,7 +70,7 @@ func I2PKeystorePath() (string, error) {
 	log.WithField("path", I2P_KEYSTORE_PATH).Debug("Checking I2P keystore path")
 	if _, err := os.Stat(I2P_KEYSTORE_PATH); err != nil {
 		log.WithField("path", I2P_KEYSTORE_PATH).Debug("I2P keystore directory does not exist, creating")
-		err := os.MkdirAll(I2P_KEYSTORE_PATH, 0755)
+		err := os.MkdirAll(I2P_KEYSTORE_PATH, 0o755)
 		if err != nil {
 			log.WithError(err).WithField("path", I2P_KEYSTORE_PATH).Error("Failed to create I2P keystore directory")
 			return "", err
@@ -88,7 +90,7 @@ func DeleteI2PKeyStore() error {
 	}
 	log.WithField("path", I2P_KEYSTORE_PATH).Debug("Successfully deleted I2P keystore")
 	return nil
-	//return os.RemoveAll(I2P_KEYSTORE_PATH)
+	// return os.RemoveAll(I2P_KEYSTORE_PATH)
 }
 
 // TorKeystorePath returns the path to the Onion Keystore. If the
@@ -98,7 +100,7 @@ func TorKeystorePath() (string, error) {
 	log.WithField("path", ONION_KEYSTORE_PATH).Debug("Checking Tor keystore path")
 	if _, err := os.Stat(ONION_KEYSTORE_PATH); err != nil {
 		log.WithField("path", ONION_KEYSTORE_PATH).Debug("Tor keystore directory does not exist, creating")
-		err := os.MkdirAll(ONION_KEYSTORE_PATH, 0755)
+		err := os.MkdirAll(ONION_KEYSTORE_PATH, 0o755)
 		if err != nil {
 			log.WithError(err).WithField("path", ONION_KEYSTORE_PATH).Error("Failed to create Tor keystore directory")
 			return "", err
@@ -118,7 +120,7 @@ func DeleteTorKeyStore() error {
 	}
 	log.WithField("path", ONION_KEYSTORE_PATH).Debug("Successfully deleted Tor keystore")
 	return nil
-	//return os.RemoveAll(ONION_KEYSTORE_PATH)
+	// return os.RemoveAll(ONION_KEYSTORE_PATH)
 }
 
 // TLSKeystorePath returns the path to the TLS Keystore. If the
@@ -128,7 +130,7 @@ func TLSKeystorePath() (string, error) {
 	log.WithField("path", TLS_KEYSTORE_PATH).Debug("Checking TLS keystore path")
 	if _, err := os.Stat(TLS_KEYSTORE_PATH); err != nil {
 		log.WithField("path", TLS_KEYSTORE_PATH).Debug("TLS keystore directory does not exist, creating")
-		err := os.MkdirAll(TLS_KEYSTORE_PATH, 0755)
+		err := os.MkdirAll(TLS_KEYSTORE_PATH, 0o755)
 		if err != nil {
 			log.WithError(err).WithField("path", TLS_KEYSTORE_PATH).Error("Failed to create TLS keystore directory")
 			return "", err
@@ -148,7 +150,7 @@ func DeleteTLSKeyStore() error {
 	}
 	log.WithField("path", TLS_KEYSTORE_PATH).Debug("Successfully deleted TLS keystore")
 	return nil
-	//return os.RemoveAll(TLS_KEYSTORE_PATH)
+	// return os.RemoveAll(TLS_KEYSTORE_PATH)
 }
 
 // Dial returns a connection for the given network and address.
