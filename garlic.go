@@ -12,8 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	sam3 "github.com/go-i2p/go-sam-go"
 	"github.com/go-i2p/i2pkeys"
-	"github.com/go-i2p/sam3"
 	"github.com/sirupsen/logrus"
 )
 
@@ -217,7 +217,7 @@ func (g *Garlic) OldListen(args ...string) (net.Listener, error) {
 				return nil, err
 			}
 			log.Debug("Successfully created datagram session")
-			return pk.(*sam3.DatagramSession), nil
+			return pk.(*sam3.DatagramSession).Listen()
 		}
 
 	}
@@ -296,8 +296,13 @@ func (g *Garlic) ListenTLS(args ...string) (net.Listener, error) {
 			//} else if args[0] == "udp" || args[0] == "udp6" || args[0] == "dg" || args[0] == "dg6" {
 		} else if protocol == "udp" || protocol == "udp6" || protocol == "dg" || protocol == "dg6" {
 			log.Debug("Creating TLS datagram listener")
+			ln, err := g.DatagramSession.Listen()
+			if err != nil {
+				log.WithError(err).Error("Failed to create datagram listener")
+				return nil, err
+			}
 			return tls.NewListener(
-				g.DatagramSession,
+				ln,
 				&tls.Config{
 					Certificates: []tls.Certificate{cert},
 				},
@@ -337,7 +342,7 @@ func (g *Garlic) Dial(net, addr string) (net.Conn, error) {
 		return nil, fmt.Errorf("onramp Dial: %v", err)
 	}
 	log.Debug("Attempting to establish connection")
-	conn, err := g.StreamSession.Dial(net, addr)
+	conn, err := g.StreamSession.Dial(addr)
 	if err != nil {
 		log.WithError(err).Error("Failed to establish connection")
 		return nil, err
@@ -367,7 +372,7 @@ func (g *Garlic) DialContext(ctx context.Context, net, addr string) (net.Conn, e
 		return nil, fmt.Errorf("onramp Dial: %v", err)
 	}
 	log.Debug("Attempting to establish connection with context")
-	conn, err := g.StreamSession.DialContext(ctx, net, addr)
+	conn, err := g.StreamSession.DialContext(ctx, addr)
 	if err != nil {
 		log.WithError(err).Error("Failed to establish connection")
 		return nil, err

@@ -49,3 +49,13 @@ testplan.md
 err
 /*.log
 *.test
+*keys
+*.pem
+*.crt
+*.p12
+*.jks
+*.pfx
+*.der
+*.db
+*.sqlite
+*data-dir*
