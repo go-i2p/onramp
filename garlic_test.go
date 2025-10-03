@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 )
@@ -62,7 +63,12 @@ func TestBareGarlic(t *testing.T) {
 
 func Serve(listener net.Listener) {
 	if err := http.Serve(listener, nil); err != nil {
-		log.Fatal(err)
+		// Don't treat listener closure as fatal - this is expected during test cleanup
+		if err.Error() != "use of closed network connection" &&
+			!strings.Contains(err.Error(), "closed") &&
+			!strings.Contains(err.Error(), "shutdown") {
+			log.Fatal(err)
+		}
 	}
 }
 

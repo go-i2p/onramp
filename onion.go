@@ -196,6 +196,9 @@ func (o *Onion) Close() error {
 		return err
 	}
 
+	// Reset global Tor instance so next call creates a new one
+	torp = nil
+
 	log.Debug("Successfully closed Onion service")
 	return nil
 	// return o.getTor().Close()

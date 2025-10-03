@@ -24,7 +24,7 @@ func TestBareOnion(t *testing.T) {
 		t.Error(err)
 	}
 	log.Println("listener:", listener.Addr().String())
-	// defer listener.Close()
+	defer listener.Close()
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "Hello, %q", r.URL.Path)
 	})
@@ -43,12 +43,12 @@ func TestBareOnion(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
+	defer resp.Body.Close()
 	fmt.Println("Status:", resp.Status)
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Error(err)
 	}
 	fmt.Println("Body:", string(body))
-	resp.Body.Close()
 	Sleep(5)
 }
