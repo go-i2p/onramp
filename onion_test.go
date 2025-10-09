@@ -25,10 +25,11 @@ func TestBareOnion(t *testing.T) {
 	}
 	log.Println("listener:", listener.Addr().String())
 	defer listener.Close()
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "Hello, %q", r.URL.Path)
 	})
-	go Serve(listener)
+	go http.Serve(listener, mux)
 	Sleep(60)
 	transport := http.Transport{
 		Dial: onion.Dial,

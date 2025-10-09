@@ -28,10 +28,11 @@ func TestBareGarlic(t *testing.T) {
 	}
 	log.Println("listener:", listener.Addr().String())
 	defer listener.Close()
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "Hello, %q", r.URL.Path)
 	})
-	go Serve(listener)
+	go http.Serve(listener, mux)
 	garlic2, err := NewGarlic("test321", "localhost:7656", OPT_WIDE)
 	if err != nil {
 		t.Error(err)
@@ -50,6 +51,7 @@ func TestBareGarlic(t *testing.T) {
 	resp, err := client.Get("https://" + listener.Addr().String() + "/")
 	if err != nil {
 		t.Error(err)
+		return
 	}
 	defer resp.Body.Close()
 	fmt.Println(resp.Status)

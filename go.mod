@@ -13,6 +13,7 @@ require (
 )
 
 require (
+	github.com/go-i2p/common v0.0.0-20250819203334-e5459df35789 // indirect
 	github.com/go-i2p/crypto v0.0.0-20250822224541-85015740db11 // indirect
 	github.com/oklog/ulid/v2 v2.1.1 // indirect
 	github.com/samber/lo v1.51.0 // indirect
@@ -24,3 +25,5 @@ require (
 	golang.org/x/sys v0.34.0 // indirect
 	golang.org/x/text v0.27.0 // indirect
 )
+
+replace github.com/go-i2p/go-sam-go => ../../../github.com/go-i2p/go-sam-go
