@@ -162,12 +162,11 @@ func (g *Garlic) setupPrimarySession() (*primary.PrimarySession, error) {
 
 		// Create PRIMARY session with Ed25519 signature type (type 7)
 		// This provides modern cryptography and is the recommended default
-		// sam3.SAM.NewPrimarySessionWithSignature returns *primary.PrimarySession
-		g.primary, err = g.SAM.NewPrimarySessionWithSignature(
+		// sam3.SAM.NewPrimarySession returns *primary.PrimarySession
+		g.primary, err = g.SAM.NewPrimarySession(
 			g.getName(),
 			*g.ServiceKeys,
 			g.getOptions(),
-			"7", // Ed25519 signature type
 		)
 		if err != nil {
 			log.WithError(err).Error("Failed to create PRIMARY session")

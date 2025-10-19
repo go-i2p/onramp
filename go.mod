@@ -6,7 +6,7 @@ toolchain go1.24.4
 
 require (
 	github.com/cretz/bine v0.2.0
-	github.com/go-i2p/go-sam-go v0.0.0-20251016194809-b6ead96fdc39
+	github.com/go-i2p/go-sam-go v0.0.0-20251019213731-de79670280a1
 	github.com/go-i2p/i2pkeys v0.33.92
 	github.com/go-i2p/logger v0.0.0-20241123010126-3050657e5d0c
 	github.com/sirupsen/logrus v1.9.3
