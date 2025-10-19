@@ -8,8 +8,8 @@ github.com/go-i2p/common v0.0.0-20250819203334-e5459df35789 h1:W7y9mxcb5xQOnuojn
 github.com/go-i2p/common v0.0.0-20250819203334-e5459df35789/go.mod h1:GD6iti2YU9LPrcESZ6Ty3lgxKGO7324tPhuKfYsJxrQ=
 github.com/go-i2p/crypto v0.0.0-20250822224541-85015740db11 h1:j/Nw7AuvEnG+qIsSG97n6aSEX4Y3ReP9jlaTamFjGMU=
 github.com/go-i2p/crypto v0.0.0-20250822224541-85015740db11/go.mod h1:5felGikM6K5D95TLvVxew1UfR0BdtPpfmJLZa8cuY5U=
-github.com/go-i2p/go-sam-go v0.0.0-20251019213731-de79670280a1 h1:knnxrJH9ec9fNtkJj4edEg/S7XBu88cx9dYUQzEXRDg=
-github.com/go-i2p/go-sam-go v0.0.0-20251019213731-de79670280a1/go.mod h1:I50BfP6g73ASJBCFNH7MhW08OXZCLjVH0+EoOy5/JDw=
+github.com/go-i2p/go-sam-go v0.0.0-20251019222649-156dfde398c8 h1:v7CsGn1B2hUv3Crv5iR4G/mb/5W133N+7RGcUM4p91Y=
+github.com/go-i2p/go-sam-go v0.0.0-20251019222649-156dfde398c8/go.mod h1:I50BfP6g73ASJBCFNH7MhW08OXZCLjVH0+EoOy5/JDw=
 github.com/go-i2p/i2pkeys v0.33.92 h1:e2vx3vf7tNesaJ8HmAlGPOcfiGM86jzeIGxh27I9J2Y=
 github.com/go-i2p/i2pkeys v0.33.92/go.mod h1:BRURQ/twxV0WKjZlFSKki93ivBi+MirZPWudfwTzMpE=
 github.com/go-i2p/logger v0.0.0-20241123010126-3050657e5d0c h1:VTiECn3dFEmUlZjto+wOwJ7SSJTHPLyNprQMR5HzIMI=
