@@ -8,7 +8,7 @@ require (
 	github.com/cretz/bine v0.2.0
 	github.com/go-i2p/go-sam-go v0.0.0-20251019222649-156dfde398c8
 	github.com/go-i2p/i2pkeys v0.33.92
-	github.com/go-i2p/logger v0.0.0-20241123010126-3050657e5d0c
+	github.com/go-i2p/logger v0.0.0-20251020233421-ba814f9db043
 	github.com/sirupsen/logrus v1.9.3
 )
 
@@ -22,7 +22,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.37.0 // indirect
 	golang.org/x/crypto v0.40.0 // indirect
 	golang.org/x/net v0.41.0 // indirect
-	golang.org/x/sys v0.34.0 // indirect
+	golang.org/x/sys v0.37.0 // indirect
 	golang.org/x/text v0.27.0 // indirect
 )
 
