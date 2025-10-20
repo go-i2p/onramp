@@ -25,3 +25,5 @@ require (
 	golang.org/x/sys v0.34.0 // indirect
 	golang.org/x/text v0.27.0 // indirect
 )
+
+replace github.com/go-i2p/go-sam-go => ../go-sam-go
