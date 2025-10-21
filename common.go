@@ -1,6 +1,3 @@
-//go:build !gen
-// +build !gen
-
 package onramp
 
 import (
@@ -11,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/go-i2p/logger"
-	"github.com/sirupsen/logrus"
 )
 
 var log = logger.GetGoI2PLogger()
@@ -157,7 +153,7 @@ func DeleteTLSKeyStore() error {
 // network is ignored. If the address ends in i2p, it returns an I2P connection.
 // if the address ends in anything else, it returns a Tor connection.
 func Dial(network, addr string) (net.Conn, error) {
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"network": network,
 		"address": addr,
 	}).Debug("Attempting to dial")
@@ -181,7 +177,7 @@ func Dial(network, addr string) (net.Conn, error) {
 // if network is tor or onion, it returns an Onion listener.
 // if keys ends with ".i2p", it returns an I2P listener.
 func Listen(network, keys string) (net.Listener, error) {
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"network": network,
 		"keys":    keys,
 	}).Debug("Attempting to create listener")

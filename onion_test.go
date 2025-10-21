@@ -12,7 +12,7 @@ import (
 )
 
 func TestBareOnion(t *testing.T) {
-	fmt.Println("TestBareOnion Countdown")
+	log.WithField("test", "TestBareOnion").Debug("Starting test countdown")
 	Sleep(5)
 	onion, err := NewOnion("test123")
 	if err != nil {
@@ -23,7 +23,7 @@ func TestBareOnion(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	log.Println("listener:", listener.Addr().String())
+	log.WithField("listener_address", listener.Addr().String()).Debug("Onion listener created")
 	defer listener.Close()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -45,11 +45,11 @@ func TestBareOnion(t *testing.T) {
 		t.Error(err)
 	}
 	defer resp.Body.Close()
-	fmt.Println("Status:", resp.Status)
+	log.WithField("status", resp.Status).Debug("HTTP response received")
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Error(err)
 	}
-	fmt.Println("Body:", string(body))
+	log.WithField("body", string(body)).Debug("Response body received")
 	Sleep(5)
 }

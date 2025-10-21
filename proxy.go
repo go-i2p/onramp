@@ -5,7 +5,7 @@ import (
 	"net"
 	"strings"
 
-	"github.com/sirupsen/logrus"
+	"github.com/go-i2p/logger"
 )
 
 type OnrampProxy struct {
@@ -22,7 +22,7 @@ type OnrampProxy struct {
 // and an I2P or Onion address, and it will act as a tunnel to a
 // listening hidden service somewhere.
 func (p *OnrampProxy) Proxy(list net.Listener, raddr string) error {
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"remote_address": raddr,
 		"local_address":  list.Addr().String(),
 	}).Debug("Starting proxy service")
@@ -35,7 +35,7 @@ func (p *OnrampProxy) Proxy(list net.Listener, raddr string) error {
 			return err
 		}
 
-		log.WithFields(logrus.Fields{
+		log.WithFields(logger.Fields{
 			"local_addr":  conn.LocalAddr().String(),
 			"remote_addr": conn.RemoteAddr().String(),
 		}).Debug("Accepted new connection, starting proxy routine")
@@ -45,7 +45,7 @@ func (p *OnrampProxy) Proxy(list net.Listener, raddr string) error {
 }
 
 func (p *OnrampProxy) proxy(conn net.Conn, raddr string) {
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"remote_address": raddr,
 		"local_addr":     conn.LocalAddr().String(),
 		"remote_addr":    conn.RemoteAddr().String(),
@@ -70,7 +70,7 @@ func (p *OnrampProxy) proxy(conn net.Conn, raddr string) {
 	}
 	defer remote.Close()
 
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"local_addr":  remote.LocalAddr().String(),
 		"remote_addr": remote.RemoteAddr().String(),
 	}).Debug("Remote connection established, starting bidirectional copy")

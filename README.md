@@ -81,24 +81,63 @@ func main() {
 ```
 
 ## Verbosity ##
-Logging can be enabled and configured using the DEBUG_I2P environment variable. By default, logging is disabled.
 
-There are three available log levels:
+Logging is provided by the `github.com/go-i2p/logger` package, which offers structured logging with advanced debugging features.
 
-- Debug
+### Logging Configuration
+
+By default, logging is **disabled** for zero-impact performance. Enable logging using environment variables:
+
+**Log Levels:**
+
+- **Debug** - Detailed information for development and troubleshooting
 ```shell
 export DEBUG_I2P=debug
 ```
-- Warn
+
+- **Warn** - Important warnings about potential issues
 ```shell
 export DEBUG_I2P=warn
 ```
-- Error
+
+- **Error** - Only serious errors and failures
 ```shell
 export DEBUG_I2P=error
 ```
 
-If DEBUG_I2P is set to an unrecognized variable, it will fall back to "debug".
+If `DEBUG_I2P` is set to an unrecognized value, it defaults to "debug" level.
+
+### Fast-Fail Mode for Testing
+
+Enable fast-fail mode to catch warnings and errors during testing. When enabled, any warning or error will cause the application to exit immediately:
+
+```shell
+export WARNFAIL_I2P=true
+```
+
+This is particularly useful in CI/CD pipelines and during development to ensure no issues are overlooked.
+
+### Example: Running with Debug Logging
+
+```shell
+# Run with debug logging enabled
+DEBUG_I2P=debug go run your-app.go
+
+# Run with fast-fail mode for testing
+DEBUG_I2P=debug WARNFAIL_I2P=true go test ./...
+```
+
+### Structured Logging Features
+
+The logger provides structured logging with contextual fields, making logs searchable and analyzable:
+
+- **WithField()** / **WithFields()** - Add contextual metadata to log entries
+- **WithError()** - Include error context with stack traces
+- Zero overhead when logging is disabled
+- Proper log level filtering based on environment configuration
+
+For more details, see the [logger package documentation](https://github.com/go-i2p/logger).
+
 
 ## Contributing
 

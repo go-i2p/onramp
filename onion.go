@@ -11,7 +11,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/sirupsen/logrus"
+	"github.com/go-i2p/logger"
 
 	"github.com/cretz/bine/tor"
 	"github.com/cretz/bine/torutil/ed25519"
@@ -112,7 +112,7 @@ func (o *Onion) NewListener(n, addr string) (net.Listener, error) {
 // address, and will automatically generate a keypair and store it.
 // the args are always ignored
 func (o *Onion) Listen(args ...string) (net.Listener, error) {
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"args": args,
 		"name": o.getName(),
 	}).Debug("Setting up Onion listener")
@@ -171,7 +171,7 @@ func (o *Onion) ListenTLS(args ...string) (net.Listener, error) {
 
 // Dial returns a net.Conn to the given onion address or clearnet address.
 func (o *Onion) Dial(net, addr string) (net.Conn, error) {
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"network": net,
 		"address": addr,
 	}).Debug("Attempting to dial via Tor")
@@ -293,7 +293,7 @@ var onions map[string]*Onion
 func CloseAllOnion() {
 	log.WithField("count", len(onions)).Debug("Closing all Onion services")
 	for i, g := range onions {
-		log.WithFields(logrus.Fields{
+		log.WithFields(logger.Fields{
 			"index": i,
 			"name":  g.name,
 		}).Debug("Closing Onion service")
@@ -326,7 +326,7 @@ func CloseOnion(tunName string) {
 // corresponding to a structure managed by the onramp library
 // and not instantiated by an app.
 func ListenOnion(network, keys string) (net.Listener, error) {
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"network": network,
 		"keys":    keys,
 	}).Debug("Creating new Onion listener")

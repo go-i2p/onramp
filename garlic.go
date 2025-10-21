@@ -15,7 +15,7 @@ import (
 	sam3 "github.com/go-i2p/go-sam-go"
 	"github.com/go-i2p/go-sam-go/primary"
 	"github.com/go-i2p/i2pkeys"
-	"github.com/sirupsen/logrus"
+	"github.com/go-i2p/logger"
 )
 
 // Garlic is a ready-made I2P streaming manager. Once initialized it always
@@ -248,7 +248,7 @@ func (g *Garlic) setupDatagramSubSession() (*primary.DatagramSubSession, error) 
 // NewListener returns a net.Listener for the Garlic structure's I2P keys.
 // accepts a variable list of arguments, arguments after the first one are ignored.
 func (g *Garlic) NewListener(n, addr string) (net.Listener, error) {
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"network": n,
 		"address": addr,
 		"name":    g.getName(),
@@ -267,7 +267,7 @@ func (g *Garlic) NewListener(n, addr string) (net.Listener, error) {
 // Listen returns a net.Listener for the Garlic structure's I2P keys.
 // accepts a variable list of arguments, arguments after the first one are ignored.
 func (g *Garlic) Listen(args ...string) (net.Listener, error) {
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"args": args,
 		"name": g.getName(),
 	}).Debug("Setting up listener")
@@ -432,7 +432,7 @@ func (g *Garlic) ListenTLS(args ...string) (net.Listener, error) {
 // This method now uses PRIMARY sessions with stream subsessions for efficient
 // tunnel sharing. All outbound connections share the same tunnels as the listener.
 func (g *Garlic) Dial(net, addr string) (net.Conn, error) {
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"network": net,
 		"address": addr,
 	}).Debug("Attempting to dial")
@@ -469,7 +469,7 @@ func (g *Garlic) Dial(net, addr string) (net.Conn, error) {
 // This method now uses PRIMARY sessions with stream subsessions for efficient
 // tunnel sharing. The context allows cancellation and timeout control.
 func (g *Garlic) DialContext(ctx context.Context, net, addr string) (net.Conn, error) {
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"network": net,
 		"address": addr,
 	}).Debug("Attempting to dial with context")
@@ -547,7 +547,7 @@ func (g *Garlic) Close() error {
 // Keys returns the I2PKeys for the Garlic structure. If none
 // exist, they are created and stored.
 func (g *Garlic) Keys() (*i2pkeys.I2PKeys, error) {
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"name":    g.getName(),
 		"address": g.getAddr(),
 	}).Debug("Retrieving I2P keys")
@@ -585,7 +585,7 @@ func (g *Garlic) DeleteKeys() error {
 // PRIMARY session creation takes 2-5 minutes for I2P tunnel establishment.
 // Subsequent subsession creation is nearly instant once PRIMARY tunnels exist.
 func NewGarlic(tunName, samAddr string, options []string) (*Garlic, error) {
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"tunnel_name": tunName,
 		"sam_address": samAddr,
 		"options":     options,
@@ -631,7 +631,7 @@ func DeleteGarlicKeys(tunName string) error {
 // I2PKeys returns the I2PKeys at the keystore directory for the given
 // tunnel name. If none exist, they are created and stored.
 func I2PKeys(tunName, samAddr string) (i2pkeys.I2PKeys, error) {
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"tunnel_name": tunName,
 		"sam_address": samAddr,
 	}).Debug("Looking up I2P keys")
@@ -691,7 +691,7 @@ var garlics map[string]*Garlic
 func CloseAllGarlic() {
 	log.WithField("count", len(garlics)).Debug("Closing all Garlic connections")
 	for i, g := range garlics {
-		log.WithFields(logrus.Fields{
+		log.WithFields(logger.Fields{
 			"index": i,
 			"name":  g.name,
 		}).Debug("Closing Garlic connection")
@@ -729,7 +729,7 @@ var SAM_ADDR = "127.0.0.1:7656"
 // corresponding to a structure managed by the onramp library
 // and not instantiated by an app.
 func ListenGarlic(network, keys string) (net.Listener, error) {
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"network":  network,
 		"keys":     keys,
 		"sam_addr": SAM_ADDR,
@@ -748,7 +748,7 @@ func ListenGarlic(network, keys string) (net.Listener, error) {
 // corresponding to a structure managed by the onramp library
 // and not instantiated by an app.
 func DialGarlic(network, addr string) (net.Conn, error) {
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"network":  network,
 		"address":  addr,
 		"sam_addr": SAM_ADDR,

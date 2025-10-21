@@ -17,7 +17,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/go-i2p/logger"
 
 	"github.com/cretz/bine/torutil"
 )
@@ -68,7 +68,7 @@ func TLSKeys(tlsHost string) (tls.Certificate, error) {
 	tlsCertPath := filepath.Join(tlsKeystorePath, tlsCert)
 	tlsKeyPath := filepath.Join(tlsKeystorePath, tlsKey)
 
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"cert_path": tlsCertPath,
 		"key_path":  tlsKeyPath,
 	}).Debug("Loading TLS certificate pair")
@@ -99,7 +99,7 @@ func CreateTLSCertificate(tlsHost string) error {
 	_, certErr := os.Stat(tlsCert)
 	_, keyErr := os.Stat(tlsKey)
 	if certErr != nil || keyErr != nil {
-		log.WithFields(logrus.Fields{
+		log.WithFields(logger.Fields{
 			"cert_exists": certErr == nil,
 			"key_exists":  keyErr == nil,
 			"cert_path":   tlsCert,

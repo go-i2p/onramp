@@ -12,10 +12,12 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/go-i2p/logger"
 )
 
 func TestBareGarlic(t *testing.T) {
-	fmt.Println("TestBareGarlic Countdown")
+	log.WithField("test", "TestBareGarlic").Debug("Starting test countdown")
 	Sleep(5)
 	garlic, err := NewGarlic("test123", "localhost:7656", OPT_WIDE)
 	if err != nil {
@@ -26,7 +28,7 @@ func TestBareGarlic(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	log.Println("listener:", listener.Addr().String())
+	log.WithField("listener_address", listener.Addr().String()).Debug("Garlic listener created")
 	defer listener.Close()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -54,12 +56,12 @@ func TestBareGarlic(t *testing.T) {
 		return
 	}
 	defer resp.Body.Close()
-	fmt.Println(resp.Status)
+	log.WithField("status", resp.Status).Debug("HTTP response received")
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Error(err)
 	}
-	fmt.Println(string(body))
+	log.WithField("body", string(body)).Debug("Response body received")
 	Sleep(5)
 }
 
@@ -78,6 +80,9 @@ func Sleep(count int) {
 	for i := 0; i < count; i++ {
 		time.Sleep(time.Second)
 		x := count - i
-		log.Printf("Waiting: %d seconds\n", x)
+		log.WithFields(logger.Fields{
+			"remaining_seconds": x,
+			"operation":         "sleep",
+		}).Debug("Waiting")
 	}
 }
