@@ -196,13 +196,14 @@ func (g *Garlic) setupStreamSubSession() (*primary.StreamSubSession, error) {
 			return nil, err
 		}
 
-		// Create stream subsession with PORT=0 (any port)
-		// This is the recommended default for single-service applications
+		// Create stream subsession with explicit port configuration
+		// This is the recommended approach for reliable I2P connections
 		var err error
-		subOpts := append(g.getOptions(), "PORT=0")
-		g.streamSub, err = g.primary.NewStreamSubSession(g.getStreamSubID(), subOpts)
+		// Use explicit ports: any local port (0) and any remote port (0)
+		// This ensures proper port allocation for both client and server connections
+		g.streamSub, err = g.primary.NewStreamSubSessionWithPort(g.getStreamSubID(), g.getOptions(), 0, 0)
 		if err != nil {
-			log.WithError(err).Error("Failed to create stream subsession")
+			log.WithError(err).Error("Failed to create stream subsession with ports")
 			return nil, fmt.Errorf("onramp setupStreamSubSession: %v", err)
 		}
 

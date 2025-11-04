@@ -4,11 +4,14 @@
 package onramp
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 	"testing"
+	"time"
 )
 
 func TestBareOnion(t *testing.T) {
@@ -24,12 +27,35 @@ func TestBareOnion(t *testing.T) {
 		t.Error(err)
 	}
 	log.WithField("listener_address", listener.Addr().String()).Debug("Onion listener created")
-	defer listener.Close()
+	
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "Hello, %q", r.URL.Path)
 	})
-	go http.Serve(listener, mux)
+	
+	// Create HTTP server with proper shutdown support
+	server := &http.Server{Handler: mux}
+	
+	// Use WaitGroup to track when server goroutine completes
+	var wg sync.WaitGroup
+	wg.Add(1)
+	
+	// Start HTTP server in goroutine
+	go func() {
+		defer wg.Done()
+		server.Serve(listener)
+	}()
+	
+	// Ensure we shutdown server and wait for goroutine before test exits
+	defer func() {
+		// Gracefully shutdown the server with timeout
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer shutdownCancel()
+		server.Shutdown(shutdownCtx)
+		// Wait for server goroutine to complete
+		wg.Wait()
+	}()
+	
 	Sleep(60)
 	transport := http.Transport{
 		Dial: onion.Dial,
