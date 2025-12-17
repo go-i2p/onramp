@@ -439,8 +439,8 @@ func (g *Garlic) Dial(net, addr string) (net.Conn, error) {
 	}).Debug("Attempting to dial")
 
 	if !strings.Contains(addr, ".i2p") {
-		log.Debug("Non-I2P address detected, returning null connection")
-		return &NullConn{}, nil
+		log.WithField("address", addr).Error("Cannot dial non-I2P address with Garlic")
+		return nil, fmt.Errorf("onramp Dial: address %q is not an I2P address (must contain .i2p)", addr)
 	}
 
 	var err error
@@ -476,8 +476,8 @@ func (g *Garlic) DialContext(ctx context.Context, net, addr string) (net.Conn, e
 	}).Debug("Attempting to dial with context")
 
 	if !strings.Contains(addr, ".i2p") {
-		log.Debug("Non-I2P address detected, returning null connection")
-		return &NullConn{}, nil
+		log.WithField("address", addr).Error("Cannot dial non-I2P address with Garlic")
+		return nil, fmt.Errorf("onramp DialContext: address %q is not an I2P address (must contain .i2p)", addr)
 	}
 
 	var err error

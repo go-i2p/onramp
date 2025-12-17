@@ -66,7 +66,9 @@ func (p *OnrampProxy) proxy(conn net.Conn, raddr string) {
 	}
 	if err != nil {
 		log.WithError(err).Error("Failed to establish remote connection")
-		log.Fatal("Cannot dial to remote")
+		// Close the client connection and return instead of terminating the application
+		conn.Close()
+		return
 	}
 	defer remote.Close()
 

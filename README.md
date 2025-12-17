@@ -71,7 +71,7 @@ import (
 
 func main() {
 	onion := &onramp.Onion{}
-	defer garlic.Close()
+	defer onion.Close()
 	listener, err := onion.Listen()
 	if err != nil {
 		log.Fatal(err)
