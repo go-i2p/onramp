@@ -685,7 +685,9 @@ func I2PKeys(tunName, samAddr string) (i2pkeys.I2PKeys, error) {
 	}
 }
 
-var garlics map[string]*Garlic
+// garlics stores managed Garlic instances for package-level functions.
+// Initialized to prevent nil map panic when using ListenGarlic/DialGarlic.
+var garlics = make(map[string]*Garlic)
 
 // CloseAllGarlic closes all garlics managed by the onramp package. It does not
 // affect objects instantiated by an app.

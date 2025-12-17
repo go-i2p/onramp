@@ -286,7 +286,9 @@ func TorKeys(keyName string) (ed25519.KeyPair, error) {
 	return keys, nil
 }
 
-var onions map[string]*Onion
+// onions stores managed Onion instances for package-level functions.
+// Initialized to prevent nil map panic when using ListenOnion/DialOnion.
+var onions = make(map[string]*Onion)
 
 // CloseAllOnion closes all onions managed by the onramp package. It does not
 // affect objects instantiated by an app.
@@ -372,8 +374,8 @@ func DeleteOnionKeys(tunName string) error {
 		log.WithError(err).Error("Failed to get keystore path")
 		return fmt.Errorf("onramp DeleteOnionKeys: discovery error %v", err)
 	}
-	keyspath := filepath.Join(keystore, tunName+".i2p.private")
-	log.WithError(err).Error("Failed to get keystore path")
+	// Use .tor.private extension to match TorKeys() which creates the key files
+	keyspath := filepath.Join(keystore, tunName+".tor.private")
 	if err := os.Remove(keyspath); err != nil {
 		log.WithError(err).WithField("path", keyspath).Error("Failed to delete key file")
 		return fmt.Errorf("onramp DeleteOnionKeys: %v", err)
