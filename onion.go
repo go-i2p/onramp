@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/go-i2p/logger"
 
@@ -17,7 +18,11 @@ import (
 	"github.com/cretz/bine/torutil/ed25519"
 )
 
-var torp *tor.Tor
+var (
+	torp     *tor.Tor
+	torpMu   sync.Mutex // Protects torp and torpRefs
+	torpRefs int        // Reference count for shared Tor instance
+)
 
 // Onion represents a structure which manages an onion service and
 // a Tor client. The onion service will automatically have persistent
@@ -44,17 +49,18 @@ func (o *Onion) getContext() context.Context {
 	return o.Context
 }
 
-func (o *Onion) getListenConf() *tor.ListenConf {
+func (o *Onion) getListenConf() (*tor.ListenConf, error) {
 	keys, err := o.Keys()
 	if err != nil {
-		log.Fatalf("Unable to get onion service keys, %s", err)
+		log.WithError(err).Error("Failed to get onion service keys")
+		return nil, fmt.Errorf("onramp getListenConf: %w", err)
 	}
 	if o.ListenConf == nil {
 		o.ListenConf = &tor.ListenConf{
 			Key: keys,
 		}
 	}
-	return o.ListenConf
+	return o.ListenConf, nil
 }
 
 func (o *Onion) getDialConf() *tor.DialConf {
@@ -65,6 +71,9 @@ func (o *Onion) getDialConf() *tor.DialConf {
 }
 
 func (o *Onion) getTor() (*tor.Tor, error) {
+	torpMu.Lock()
+	defer torpMu.Unlock()
+
 	if torp == nil {
 		log.Debug("Initializing new Tor instance")
 		var err error
@@ -75,6 +84,8 @@ func (o *Onion) getTor() (*tor.Tor, error) {
 		}
 		log.Debug("Tor instance started successfully")
 	}
+	torpRefs++
+	log.WithField("refs", torpRefs).Debug("Incremented Tor reference count")
 	return torp, nil
 }
 
@@ -136,7 +147,11 @@ func (o *Onion) OldListen(args ...string) (net.Listener, error) {
 	if err != nil {
 		return nil, err
 	}
-	listener, err := t.Listen(o.getContext(), o.getListenConf())
+	listenConf, err := o.getListenConf()
+	if err != nil {
+		return nil, err
+	}
+	listener, err := t.Listen(o.getContext(), listenConf)
 	if err != nil {
 		log.WithError(err).Error("Failed to create Tor listener")
 		return nil, err
@@ -161,7 +176,11 @@ func (o *Onion) ListenTLS(args ...string) (net.Listener, error) {
 	if err != nil {
 		return nil, err
 	}
-	l, err := t.Listen(o.getContext(), o.getListenConf())
+	listenConf, err := o.getListenConf()
+	if err != nil {
+		return nil, err
+	}
+	l, err := t.Listen(o.getContext(), listenConf)
 	if err != nil {
 		log.WithError(err).Error("Failed to create base Tor listener")
 		return nil, err
@@ -196,27 +215,37 @@ func (o *Onion) Dial(net, addr string) (net.Conn, error) {
 }
 
 // Close closes the Onion Service and all associated resources.
+// The shared Tor instance is only closed when all Onion instances have called Close().
 func (o *Onion) Close() error {
 	log.WithField("name", o.getName()).Debug("Closing Onion service")
 
-	t, err := o.getTor()
-	if err != nil {
-		// Tor was never started, nothing to close
+	torpMu.Lock()
+	defer torpMu.Unlock()
+
+	if torp == nil {
 		log.Debug("Tor not running, nothing to close")
 		return nil
 	}
-	err = t.Close()
-	if err != nil {
-		log.WithError(err).Error("Failed to close Tor instance")
-		return err
-	}
 
-	// Reset global Tor instance so next call creates a new one
-	torp = nil
+	torpRefs--
+	log.WithField("refs", torpRefs).Debug("Decremented Tor reference count")
+
+	// Only close Tor when no more references exist
+	if torpRefs <= 0 {
+		err := torp.Close()
+		if err != nil {
+			log.WithError(err).Error("Failed to close Tor instance")
+			return err
+		}
+		torp = nil
+		torpRefs = 0 // Reset to prevent negative counts
+		log.Debug("Successfully closed Tor instance")
+	} else {
+		log.Debug("Tor instance still in use by other Onion services")
+	}
 
 	log.Debug("Successfully closed Onion service")
 	return nil
-	// return o.getTor().Close()
 }
 
 // Keys returns the keys for the Onion

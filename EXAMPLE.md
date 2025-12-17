@@ -56,7 +56,8 @@ func main() {
 	client := &http.Client{
 		Transport: &transport,
 	}
-	resp, err := client.Get("http://" + listener.Addr().String() + "/")
+	// Replace with an actual I2P destination address
+	resp, err := client.Get("http://example.i2p/")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -178,7 +179,8 @@ func main() {
 	client := &http.Client{
 		Transport: &transport,
 	}
-	resp, err := client.Get("http://" + listener.Addr().String() + "/")
+	// Replace with an actual I2P destination address
+	resp, err := client.Get("http://example.i2p/")
 	if err != nil {
 		log.Fatal(err)
 	}
