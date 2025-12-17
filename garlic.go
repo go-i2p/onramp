@@ -65,6 +65,11 @@ func (g *Garlic) addrString(addr string) string {
 }
 
 func (g *Garlic) String() string {
+	// Guard against nil ServiceKeys - can occur on uninitialized Garlic instances
+	// before Listen() or Dial() has been called to establish keys
+	if g.ServiceKeys == nil {
+		return ""
+	}
 	var r string
 	switch g.AddrMode {
 	case DEST_HASH:
@@ -83,7 +88,7 @@ func (g *Garlic) String() string {
 	default:
 		r = g.ServiceKeys.Address.DestHash().Hash()
 	}
-	return g.addrString(r) // r //strings.TrimLeft(strings.TrimRight(r, "\n"), "\n") //strings.TrimSpace(r)
+	return g.addrString(r)
 }
 
 func (g *Garlic) getName() string {
