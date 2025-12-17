@@ -267,7 +267,7 @@ func TorKeys(keyName string) (ed25519.KeyPair, error) {
 		tkeys, err := ed25519.GenerateKey(nil)
 		if err != nil {
 			log.WithError(err).Error("Failed to generate onion service key")
-			log.Fatal("Unable to generate onion service key")
+			return nil, fmt.Errorf("onramp TorKeys: failed to generate key: %w", err)
 		}
 		keys = tkeys
 
@@ -275,13 +275,13 @@ func TorKeys(keyName string) (ed25519.KeyPair, error) {
 		f, err := os.Create(keysPath)
 		if err != nil {
 			log.WithError(err).Error("Failed to create Tor keys file")
-			log.Fatal("Unable to create Tor keys file for writing")
+			return nil, fmt.Errorf("onramp TorKeys: failed to create key file: %w", err)
 		}
 		defer f.Close()
 		_, err = f.Write(tkeys.PrivateKey())
 		if err != nil {
 			log.WithError(err).Error("Failed to write Tor keys to disk")
-			log.Fatal("Unable to write Tor keys to disk")
+			return nil, fmt.Errorf("onramp TorKeys: failed to write key file: %w", err)
 		}
 		log.Debug("Successfully generated and stored new keys")
 	} else if err == nil {
@@ -289,14 +289,14 @@ func TorKeys(keyName string) (ed25519.KeyPair, error) {
 		tkeys, err := os.ReadFile(keysPath)
 		if err != nil {
 			log.WithError(err).Error("Failed to read Tor keys from disk")
-			log.Fatal("Unable to read Tor keys from disk")
+			return nil, fmt.Errorf("onramp TorKeys: failed to read key file: %w", err)
 		}
 		k := ed25519.FromCryptoPrivateKey(tkeys)
 		keys = k
 		log.Debug("Successfully loaded existing keys")
 	} else {
 		log.WithError(err).Error("Failed to set up Tor keys")
-		log.Fatal("Unable to set up Tor keys")
+		return nil, fmt.Errorf("onramp TorKeys: failed to stat key file: %w", err)
 	}
 	return keys, nil
 }
