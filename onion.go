@@ -333,17 +333,24 @@ func TorKeys(keyName string) (ed25519.KeyPair, error) {
 // onions stores managed Onion instances for package-level functions.
 // Initialized to prevent nil map panic when using ListenOnion/DialOnion.
 var onions = make(map[string]*Onion)
+var onionsMu sync.RWMutex // Protects concurrent access to onions map
 
 // CloseAllOnion closes all onions managed by the onramp package. It does not
 // affect objects instantiated by an app.
 func CloseAllOnion() {
+	onionsMu.Lock()
+	defer onionsMu.Unlock()
 	log.WithField("count", len(onions)).Debug("Closing all Onion services")
 	for i, g := range onions {
 		log.WithFields(logger.Fields{
 			"index": i,
 			"name":  g.name,
 		}).Debug("Closing Onion service")
-		CloseOnion(i)
+		// Close directly instead of calling CloseOnion to avoid recursive lock
+		if err := g.Close(); err != nil {
+			log.WithError(err).Error("Failed to close Onion service")
+		}
+		delete(onions, i)
 	}
 
 	log.Debug("All Onion services closed")
@@ -352,6 +359,8 @@ func CloseAllOnion() {
 // CloseOnion closes the Onion at the given index. It does not affect Onion
 // objects instantiated by an app.
 func CloseOnion(tunName string) {
+	onionsMu.Lock()
+	defer onionsMu.Unlock()
 	log.WithField("tunnel_name", tunName).Debug("Attempting to close Onion service")
 
 	g, ok := onions[tunName]
@@ -363,6 +372,7 @@ func CloseOnion(tunName string) {
 		} else {
 			log.Debug("Successfully closed Onion service")
 		}
+		delete(onions, tunName) // Remove from map after closing
 	} else {
 		log.Debug("No Onion service found for tunnel name")
 	}
@@ -382,7 +392,9 @@ func ListenOnion(network, keys string) (net.Listener, error) {
 		log.WithError(err).Error("Failed to create new Onion")
 		return nil, fmt.Errorf("onramp Listen: %v", err)
 	}
+	onionsMu.Lock()
 	onions[keys] = g
+	onionsMu.Unlock()
 	log.Debug("Onion service registered, creating listener")
 
 	listener, err := g.Listen()
@@ -393,7 +405,6 @@ func ListenOnion(network, keys string) (net.Listener, error) {
 
 	log.Debug("Successfully created Onion listener")
 	return listener, nil
-	// return g.Listen()
 }
 
 // DialOnion returns a net.Conn for a onion structure's keys
@@ -404,7 +415,9 @@ func DialOnion(network, addr string) (net.Conn, error) {
 	if err != nil {
 		return nil, fmt.Errorf("onramp Dial: %v", err)
 	}
+	onionsMu.Lock()
 	onions[addr] = g
+	onionsMu.Unlock()
 	return g.Dial(network, addr)
 }
 
