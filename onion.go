@@ -64,34 +64,33 @@ func (o *Onion) getDialConf() *tor.DialConf {
 	return o.DialConf
 }
 
-func (o *Onion) getTor() *tor.Tor {
+func (o *Onion) getTor() (*tor.Tor, error) {
 	if torp == nil {
 		log.Debug("Initializing new Tor instance")
 		var err error
 		torp, err = tor.Start(o.getContext(), o.getStartConf())
 		if err != nil {
 			log.WithError(err).Error("Failed to start Tor")
-			panic(err) // return nil instead?
+			return nil, fmt.Errorf("onramp getTor: failed to start Tor: %w", err)
 		}
 		log.Debug("Tor instance started successfully")
 	}
-	return torp
+	return torp, nil
 }
 
-func (o *Onion) getDialer() *tor.Dialer {
-	// if o.Dialer == nil {
-	// var err error
-	// o.Dialer, err
+func (o *Onion) getDialer() (*tor.Dialer, error) {
 	log.Debug("Creating new Tor dialer")
-	dialer, err := o.getTor().Dialer(o.getContext(), o.getDialConf())
+	t, err := o.getTor()
+	if err != nil {
+		return nil, err
+	}
+	dialer, err := t.Dialer(o.getContext(), o.getDialConf())
 	if err != nil {
 		log.WithError(err).Error("Failed to create Tor dialer")
-		panic(err)
+		return nil, fmt.Errorf("onramp getDialer: failed to create dialer: %w", err)
 	}
 	log.Debug("Tor dialer created successfully")
-	//}
-	//return o.Dialer
-	return dialer
+	return dialer, nil
 }
 
 func (o *Onion) getName() string {
@@ -133,7 +132,11 @@ func (o *Onion) Listen(args ...string) (net.Listener, error) {
 func (o *Onion) OldListen(args ...string) (net.Listener, error) {
 	log.WithField("name", o.getName()).Debug("Creating Tor listener")
 
-	listener, err := o.getTor().Listen(o.getContext(), o.getListenConf())
+	t, err := o.getTor()
+	if err != nil {
+		return nil, err
+	}
+	listener, err := t.Listen(o.getContext(), o.getListenConf())
 	if err != nil {
 		log.WithError(err).Error("Failed to create Tor listener")
 		return nil, err
@@ -141,7 +144,6 @@ func (o *Onion) OldListen(args ...string) (net.Listener, error) {
 
 	log.Debug("Successfully created Tor listener")
 	return listener, nil
-	// return o.getTor().Listen(o.getContext(), o.getListenConf())
 }
 
 // ListenTLS returns a net.Listener which will apply TLS encryption
@@ -155,7 +157,11 @@ func (o *Onion) ListenTLS(args ...string) (net.Listener, error) {
 		return nil, fmt.Errorf("onramp ListenTLS: %v", err)
 	}
 	log.Debug("Creating base Tor listener")
-	l, err := o.getTor().Listen(o.getContext(), o.getListenConf())
+	t, err := o.getTor()
+	if err != nil {
+		return nil, err
+	}
+	l, err := t.Listen(o.getContext(), o.getListenConf())
 	if err != nil {
 		log.WithError(err).Error("Failed to create base Tor listener")
 		return nil, err
@@ -175,7 +181,11 @@ func (o *Onion) Dial(net, addr string) (net.Conn, error) {
 		"network": net,
 		"address": addr,
 	}).Debug("Attempting to dial via Tor")
-	conn, err := o.getDialer().DialContext(o.getContext(), net, addr)
+	dialer, err := o.getDialer()
+	if err != nil {
+		return nil, err
+	}
+	conn, err := dialer.DialContext(o.getContext(), net, addr)
 	if err != nil {
 		log.WithError(err).Error("Failed to establish Tor connection")
 		return nil, err
@@ -183,14 +193,19 @@ func (o *Onion) Dial(net, addr string) (net.Conn, error) {
 
 	log.Debug("Successfully established Tor connection")
 	return conn, nil
-	// return o.getDialer().DialContext(o.getContext(), net, addr)
 }
 
 // Close closes the Onion Service and all associated resources.
 func (o *Onion) Close() error {
 	log.WithField("name", o.getName()).Debug("Closing Onion service")
 
-	err := o.getTor().Close()
+	t, err := o.getTor()
+	if err != nil {
+		// Tor was never started, nothing to close
+		log.Debug("Tor not running, nothing to close")
+		return nil
+	}
+	err = t.Close()
 	if err != nil {
 		log.WithError(err).Error("Failed to close Tor instance")
 		return err
