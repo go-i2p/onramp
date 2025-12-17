@@ -205,3 +205,13 @@ func Listen(network, keys string) (net.Listener, error) {
 	log.WithField("hostname", hostname).Debug("Creating Tor listener for non-i2p hostname")
 	return ListenOnion(network, keys)
 }
+
+// CloseAll closes all Garlic and Onion instances managed by the onramp package.
+// It does not affect objects instantiated directly by an application.
+// This is a convenience function that calls CloseAllGarlic() and CloseAllOnion().
+func CloseAll() {
+	log.Debug("Closing all managed Garlic and Onion instances")
+	CloseAllGarlic()
+	CloseAllOnion()
+	log.Debug("All managed instances closed")
+}
