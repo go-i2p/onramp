@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	sam3 "github.com/go-i2p/go-sam-go"
 	"github.com/go-i2p/go-sam-go/primary"
@@ -693,10 +694,13 @@ func I2PKeys(tunName, samAddr string) (i2pkeys.I2PKeys, error) {
 // garlics stores managed Garlic instances for package-level functions.
 // Initialized to prevent nil map panic when using ListenGarlic/DialGarlic.
 var garlics = make(map[string]*Garlic)
+var garlicsMu sync.RWMutex // Protects concurrent access to garlics map
 
 // CloseAllGarlic closes all garlics managed by the onramp package. It does not
 // affect objects instantiated by an app.
 func CloseAllGarlic() {
+	garlicsMu.Lock()
+	defer garlicsMu.Unlock()
 	log.WithField("count", len(garlics)).Debug("Closing all Garlic connections")
 	for i, g := range garlics {
 		log.WithFields(logger.Fields{
@@ -705,7 +709,11 @@ func CloseAllGarlic() {
 		}).Debug("Closing Garlic connection")
 
 		log.Println("Closing garlic", g.name)
-		CloseGarlic(i)
+		// Close directly instead of calling CloseGarlic to avoid recursive lock
+		if err := g.Close(); err != nil {
+			log.WithError(err).Error("Error closing Garlic connection")
+		}
+		delete(garlics, i)
 	}
 	log.Debug("All Garlic connections closed")
 }
@@ -713,17 +721,19 @@ func CloseAllGarlic() {
 // CloseGarlic closes the Garlic at the given index. It does not affect Garlic
 // objects instantiated by an app.
 func CloseGarlic(tunName string) {
+	garlicsMu.Lock()
+	defer garlicsMu.Unlock()
 	log.WithField("tunnel_name", tunName).Debug("Attempting to close Garlic connection")
 	g, ok := garlics[tunName]
 	if ok {
 		log.Debug("Found Garlic connection, closing")
-		// g.Close()
 		err := g.Close()
 		if err != nil {
 			log.WithError(err).Error("Error closing Garlic connection")
 		} else {
 			log.Debug("Successfully closed Garlic connection")
 		}
+		delete(garlics, tunName) // Remove from map after closing
 	} else {
 		log.Debug("No Garlic connection found for tunnel name")
 	}
@@ -747,7 +757,9 @@ func ListenGarlic(network, keys string) (net.Listener, error) {
 		log.WithError(err).Error("Failed to create new Garlic")
 		return nil, fmt.Errorf("onramp Listen: %v", err)
 	}
+	garlicsMu.Lock()
 	garlics[keys] = g
+	garlicsMu.Unlock()
 	log.Debug("Successfully created Garlic listener")
 	return g.Listen()
 }
@@ -767,7 +779,9 @@ func DialGarlic(network, addr string) (net.Conn, error) {
 		log.WithError(err).Error("Failed to create new Garlic")
 		return nil, fmt.Errorf("onramp Dial: %v", err)
 	}
+	garlicsMu.Lock()
 	garlics[addr] = g
+	garlicsMu.Unlock()
 	log.WithField("address", addr).Debug("Attempting to dial")
 	conn, err := g.Dial(network, addr)
 	if err != nil {
@@ -777,5 +791,4 @@ func DialGarlic(network, addr string) (net.Conn, error) {
 
 	log.Debug("Successfully established Garlic connection")
 	return conn, nil
-	// return g.Dial(network, addr)
 }
