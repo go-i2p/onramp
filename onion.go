@@ -332,8 +332,10 @@ func TorKeys(keyName string) (ed25519.KeyPair, error) {
 
 // onions stores managed Onion instances for package-level functions.
 // Initialized to prevent nil map panic when using ListenOnion/DialOnion.
-var onions = make(map[string]*Onion)
-var onionsMu sync.RWMutex // Protects concurrent access to onions map
+var (
+	onions   = make(map[string]*Onion)
+	onionsMu sync.RWMutex // Protects concurrent access to onions map
+)
 
 // CloseAllOnion closes all onions managed by the onramp package. It does not
 // affect objects instantiated by an app.

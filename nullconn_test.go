@@ -35,7 +35,6 @@ func TestNullConn_Read(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			buffer := make([]byte, tt.bufferSize)
 			n, err := nc.Read(buffer)
-
 			if err != nil {
 				t.Errorf("Read() error = %v, want nil", err)
 			}
@@ -76,7 +75,6 @@ func TestNullConn_Write(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			n, err := nc.Write(tt.data)
-
 			if err != nil {
 				t.Errorf("Write() error = %v, want nil", err)
 			}
@@ -93,7 +91,6 @@ func TestNullConn_Close_ReturnsNoError(t *testing.T) {
 	nc := &NullConn{}
 
 	err := nc.Close()
-
 	if err != nil {
 		t.Errorf("Close() error = %v, want nil", err)
 	}
@@ -264,7 +261,6 @@ func TestNullConn_SetDeadline_ReturnsNoError(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := nc.SetDeadline(tt.deadline)
-
 			if err != nil {
 				t.Errorf("SetDeadline() error = %v, want nil", err)
 			}
@@ -297,7 +293,6 @@ func TestNullConn_SetReadDeadline_ReturnsNoError(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := nc.SetReadDeadline(tt.deadline)
-
 			if err != nil {
 				t.Errorf("SetReadDeadline() error = %v, want nil", err)
 			}
@@ -330,7 +325,6 @@ func TestNullConn_SetWriteDeadline_ReturnsNoError(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := nc.SetWriteDeadline(tt.deadline)
-
 			if err != nil {
 				t.Errorf("SetWriteDeadline() error = %v, want nil", err)
 			}

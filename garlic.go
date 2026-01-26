@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/go-i2p/go-sam-bridge/lib/embedding"
 	sam3 "github.com/go-i2p/go-sam-go"
 	"github.com/go-i2p/go-sam-go/primary"
 	"github.com/go-i2p/i2pkeys"
@@ -25,6 +26,7 @@ import (
 // The struct uses PRIMARY sessions with subsessions, allowing multiple connection types
 // (stream and datagram) to share the same I2P tunnels, reducing resource overhead.
 type Garlic struct {
+	*embedding.Bridge
 	// PRIMARY session fields (SAMv3.3+)
 	// These enable efficient tunnel sharing across multiple subsessions
 	primary     *primary.PrimarySession     // Master session managing shared tunnels
@@ -546,6 +548,9 @@ func (g *Garlic) Close() error {
 	if len(errors) > 0 {
 		return fmt.Errorf("onramp Close: %v", errors)
 	}
+	if g.Bridge != nil {
+		g.Bridge.Stop(context.Background())
+	}
 
 	log.Debug("All sessions closed successfully")
 	return nil
@@ -603,6 +608,14 @@ func NewGarlic(tunName, samAddr string, options []string) (*Garlic, error) {
 	g.addr = samAddr
 	g.opts = options
 	var err error
+	g.Bridge, err = newEmbeddedSAMBridge()
+	if err != nil {
+		log.WithError(err).Error("Failed to create embedded SAM bridge")
+		return nil, fmt.Errorf("onramp NewGarlic: %v", err)
+	}
+	if g.Bridge != nil {
+		g.Bridge.Start(context.Background())
+	}
 	if g.SAM, err = g.samSession(); err != nil {
 		log.WithError(err).Error("Failed to create SAM session")
 		return nil, fmt.Errorf("onramp NewGarlic: %v", err)
@@ -693,8 +706,10 @@ func I2PKeys(tunName, samAddr string) (i2pkeys.I2PKeys, error) {
 
 // garlics stores managed Garlic instances for package-level functions.
 // Initialized to prevent nil map panic when using ListenGarlic/DialGarlic.
-var garlics = make(map[string]*Garlic)
-var garlicsMu sync.RWMutex // Protects concurrent access to garlics map
+var (
+	garlics   = make(map[string]*Garlic)
+	garlicsMu sync.RWMutex // Protects concurrent access to garlics map
+)
 
 // CloseAllGarlic closes all garlics managed by the onramp package. It does not
 // affect objects instantiated by an app.
