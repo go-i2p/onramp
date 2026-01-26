@@ -1,0 +1,27 @@
+package onramp
+
+import (
+	"net"
+
+	"github.com/go-i2p/go-sam-bridge/lib/embedding"
+)
+
+func newEmbeddedSAMBridge() (*embedding.Bridge, error) {
+	if !checkPortAvailable("localhost:7656") {
+		bridge, err := embedding.New()
+		if err != nil {
+			return nil, err
+		}
+		return bridge, nil
+	}
+	return nil, nil
+}
+
+func checkPortAvailable(addr string) bool {
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return false
+	}
+	ln.Close()
+	return true
+}

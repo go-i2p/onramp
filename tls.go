@@ -17,7 +17,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/go-i2p/logger"
 
 	"github.com/cretz/bine/torutil"
 )
@@ -68,7 +68,7 @@ func TLSKeys(tlsHost string) (tls.Certificate, error) {
 	tlsCertPath := filepath.Join(tlsKeystorePath, tlsCert)
 	tlsKeyPath := filepath.Join(tlsKeystorePath, tlsKey)
 
-	log.WithFields(logrus.Fields{
+	log.WithFields(logger.Fields{
 		"cert_path": tlsCertPath,
 		"key_path":  tlsKeyPath,
 	}).Debug("Loading TLS certificate pair")
@@ -99,7 +99,7 @@ func CreateTLSCertificate(tlsHost string) error {
 	_, certErr := os.Stat(tlsCert)
 	_, keyErr := os.Stat(tlsKey)
 	if certErr != nil || keyErr != nil {
-		log.WithFields(logrus.Fields{
+		log.WithFields(logger.Fields{
 			"cert_exists": certErr == nil,
 			"key_exists":  keyErr == nil,
 			"cert_path":   tlsCert,
@@ -161,7 +161,7 @@ func createTLSCertificate(host string) error {
 	// save the TLS private key
 	privFile := filepath.Join(privStore, host+".pem")
 	log.WithField("path", privFile).Debug("Saving TLS private key")
-	keyOut, err := os.OpenFile(privFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	keyOut, err := os.OpenFile(privFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		log.WithError(err).WithField("path", privFile).Error("Failed to create private key file")
 		return fmt.Errorf("failed to open %s for writing: %v", privFile, err)
@@ -187,7 +187,7 @@ func createTLSCertificate(host string) error {
 	// CRL
 	crlFile := filepath.Join(privStore, host+".crl")
 	log.WithField("path", crlFile).Debug("Creating CRL")
-	crlOut, err := os.OpenFile(crlFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	crlOut, err := os.OpenFile(crlFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		log.WithError(err).WithField("path", crlFile).Error("Failed to create CRL file")
 		return fmt.Errorf("failed to open %s for writing: %s", crlFile, err)

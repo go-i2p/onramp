@@ -4,15 +4,18 @@
 package onramp
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 	"testing"
+	"time"
 )
 
 func TestBareOnion(t *testing.T) {
-	fmt.Println("TestBareOnion Countdown")
+	log.WithField("test", "TestBareOnion").Debug("Starting test countdown")
 	Sleep(5)
 	onion, err := NewOnion("test123")
 	if err != nil {
@@ -23,12 +26,36 @@ func TestBareOnion(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	log.Println("listener:", listener.Addr().String())
-	// defer listener.Close()
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	log.WithField("listener_address", listener.Addr().String()).Debug("Onion listener created")
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "Hello, %q", r.URL.Path)
 	})
-	go Serve(listener)
+
+	// Create HTTP server with proper shutdown support
+	server := &http.Server{Handler: mux}
+
+	// Use WaitGroup to track when server goroutine completes
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	// Start HTTP server in goroutine
+	go func() {
+		defer wg.Done()
+		server.Serve(listener)
+	}()
+
+	// Ensure we shutdown server and wait for goroutine before test exits
+	defer func() {
+		// Gracefully shutdown the server with timeout
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer shutdownCancel()
+		server.Shutdown(shutdownCtx)
+		// Wait for server goroutine to complete
+		wg.Wait()
+	}()
+
 	Sleep(60)
 	transport := http.Transport{
 		Dial: onion.Dial,
@@ -43,12 +70,12 @@ func TestBareOnion(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	fmt.Println("Status:", resp.Status)
+	defer resp.Body.Close()
+	log.WithField("status", resp.Status).Debug("HTTP response received")
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		t.Error(err)
 	}
-	fmt.Println("Body:", string(body))
-	resp.Body.Close()
+	log.WithField("body", string(body)).Debug("Response body received")
 	Sleep(5)
 }
