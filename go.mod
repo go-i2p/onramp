@@ -6,7 +6,7 @@ toolchain go1.24.12
 
 require (
 	github.com/cretz/bine v0.2.0
-	github.com/go-i2p/go-sam-bridge v0.0.0-20260126220458-da8d34b9e68c
+	github.com/go-i2p/go-sam-bridge v0.0.0-20260127191723-8e14472fcc26
 	github.com/go-i2p/go-sam-go v0.33.0
 	github.com/go-i2p/i2pkeys v0.33.92
 	github.com/go-i2p/logger v0.1.0
@@ -23,11 +23,11 @@ require (
 	github.com/go-i2p/common v0.1.0 // indirect
 	github.com/go-i2p/crypto v0.1.1-0.20251212210701-124dadb97cb7 // indirect
 	github.com/go-i2p/elgamal v0.0.2 // indirect
-	github.com/go-i2p/go-datagrams v0.0.0-20260120232136-e5cab27c098a // indirect
-	github.com/go-i2p/go-i2cp v0.1.0 // indirect
+	github.com/go-i2p/go-datagrams v0.0.0-20260127191042-ac9c62c3262d // indirect
+	github.com/go-i2p/go-i2cp v0.1.1-0.20260124020217-dc6f6649a1df // indirect
 	github.com/go-i2p/go-i2p v0.1.1-0.20251217014914-4558f6b6e173 // indirect
 	github.com/go-i2p/go-noise v0.1.0 // indirect
-	github.com/go-i2p/go-streaming v0.0.0-20260120210156-9469386fc621 // indirect
+	github.com/go-i2p/go-streaming v0.0.0-20260127190938-144f6f599abb // indirect
 	github.com/go-i2p/noise v0.0.0-20251212204422-ded862d8cdf9 // indirect
 	github.com/go-i2p/su3 v0.0.1 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
@@ -52,5 +52,3 @@ require (
 	golang.org/x/sys v0.40.0 // indirect
 	golang.org/x/text v0.33.0 // indirect
 )
-
-replace github.com/go-i2p/go-sam-go => ../go-sam-go
