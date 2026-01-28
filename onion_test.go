@@ -19,12 +19,12 @@ func TestBareOnion(t *testing.T) {
 	Sleep(5)
 	onion, err := NewOnion("test123")
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	defer onion.Close()
 	listener, err := onion.ListenTLS()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	log.WithField("listener_address", listener.Addr().String()).Debug("Onion listener created")
 

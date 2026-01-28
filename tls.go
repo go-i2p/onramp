@@ -263,7 +263,7 @@ func NewTLSCertificateAltNames(priv *ecdsa.PrivateKey, hosts ...string) ([]byte,
 		NotAfter:           notAfter,
 		SignatureAlgorithm: x509.ECDSAWithSHA512,
 
-		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature | x509.KeyUsageCRLSign,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		BasicConstraintsValid: true,
 		IsCA:                  true,
