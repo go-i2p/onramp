@@ -199,19 +199,23 @@ func createTLSCertificate(host string) error {
 	}
 
 	now := time.Now()
-	revokedCerts := []pkix.RevokedCertificate{
-		{
-			SerialNumber:   crlcert.SerialNumber,
-			RevocationTime: now,
+	crlTemplate := &x509.RevocationList{
+		RevokedCertificateEntries: []x509.RevocationListEntry{
+			{
+				SerialNumber:   crlcert.SerialNumber,
+				RevocationTime: now,
+			},
 		},
+		Number:     big.NewInt(1),
+		ThisUpdate: now,
+		NextUpdate: now.Add(24 * time.Hour),
 	}
-
-	crlBytes, err := crlcert.CreateCRL(rand.Reader, priv, revokedCerts, now, now)
+	crlBytes, err := x509.CreateRevocationList(rand.Reader, crlTemplate, crlcert, priv)
 	if err != nil {
 		log.WithError(err).Error("Failed to create CRL")
 		return fmt.Errorf("error creating CRL: %s", err)
 	}
-	_, err = x509.ParseDERCRL(crlBytes)
+	_, err = x509.ParseRevocationList(crlBytes)
 	if err != nil {
 		log.WithError(err).Error("Failed to validate generated CRL")
 		return fmt.Errorf("error reparsing CRL: %s", err)

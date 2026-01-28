@@ -7,7 +7,9 @@ import (
 )
 
 func newEmbeddedSAMBridge() (*embedding.Bridge, error) {
-	if !checkPortAvailable("localhost:7656") {
+	// If port 7656 is available (nothing listening), create an embedded SAM bridge
+	// If something is already listening (external SAM bridge), return nil
+	if checkPortAvailable("localhost:7656") {
 		bridge, err := embedding.New()
 		if err != nil {
 			return nil, err

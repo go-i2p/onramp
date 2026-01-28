@@ -39,9 +39,9 @@ func GetJoinedWD(dir string) (string, error) {
 }
 
 var (
-	i2pdefault, i2pkserr = GetJoinedWD("i2pkeys")
-	tordefault, torkserr = GetJoinedWD("onionkeys")
-	tlsdefault, tlskserr = GetJoinedWD("tlskeys")
+	i2pdefault, _ = GetJoinedWD("i2pkeys")
+	tordefault, _ = GetJoinedWD("onionkeys")
+	tlsdefault, _ = GetJoinedWD("tlskeys")
 )
 
 // I2P_KEYSTORE_PATH is the place where I2P Keys will be saved.

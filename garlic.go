@@ -54,10 +54,9 @@ const (
 
 func (g *Garlic) Network() string {
 	if g.streamSub != nil {
-		return "tcp"
-	} else {
-		return "udp"
+		return "i2p-stream"
 	}
+	return "i2p-datagram"
 }
 
 func (g *Garlic) addrString(addr string) string {
@@ -574,14 +573,14 @@ func (g *Garlic) Keys() (*i2pkeys.I2PKeys, error) {
 }
 
 func (g *Garlic) DeleteKeys() error {
-	// return DeleteGarlicKeys(g.getName())
 	log.WithField("name", g.getName()).Debug("Attempting to delete Garlic keys")
 	err := DeleteGarlicKeys(g.getName())
 	if err != nil {
 		log.WithError(err).Error("Failed to delete Garlic keys")
+		return err
 	}
 	log.Debug("Successfully deleted Garlic keys")
-	return err
+	return nil
 }
 
 // NewGarlic returns a new Garlic struct. It is immediately ready to use with
