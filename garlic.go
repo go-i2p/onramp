@@ -593,6 +593,9 @@ func (g *Garlic) DeleteKeys() error {
 		log.WithError(err).Error("Failed to delete Garlic keys")
 		return err
 	}
+	// Clear the in-memory keys so subsequent operations will generate new keys
+	// rather than continuing to use the deleted keys.
+	g.ServiceKeys = nil
 	log.Debug("Successfully deleted Garlic keys")
 	return nil
 }
@@ -786,6 +789,18 @@ func ListenGarlic(network, keys string) (net.Listener, error) {
 		"keys":     keys,
 		"sam_addr": SAM_ADDR,
 	}).Debug("Creating new Garlic listener")
+
+	// Check if we already have a Garlic instance for this key
+	garlicsMu.RLock()
+	existing, exists := garlics[keys]
+	garlicsMu.RUnlock()
+
+	if exists {
+		log.WithField("keys", keys).Debug("Reusing existing Garlic instance")
+		return existing.Listen()
+	}
+
+	// Create new Garlic instance
 	g, err := NewGarlic(keys, SAM_ADDR, OPT_DEFAULTS)
 	if err != nil {
 		log.WithError(err).Error("Failed to create new Garlic")
@@ -808,14 +823,29 @@ func DialGarlic(network, addr string) (net.Conn, error) {
 		"sam_addr": SAM_ADDR,
 	}).Debug("Creating new Garlic connection")
 
-	g, err := NewGarlic(addr, SAM_ADDR, OPT_DEFAULTS)
-	if err != nil {
-		log.WithError(err).Error("Failed to create new Garlic")
-		return nil, fmt.Errorf("onramp Dial: %v", err)
+	// Check if we already have a Garlic instance for this address
+	garlicsMu.RLock()
+	existing, exists := garlics[addr]
+	garlicsMu.RUnlock()
+
+	var g *Garlic
+	var err error
+
+	if exists {
+		log.WithField("address", addr).Debug("Reusing existing Garlic instance")
+		g = existing
+	} else {
+		// Create new Garlic instance
+		g, err = NewGarlic(addr, SAM_ADDR, OPT_DEFAULTS)
+		if err != nil {
+			log.WithError(err).Error("Failed to create new Garlic")
+			return nil, fmt.Errorf("onramp Dial: %v", err)
+		}
+		garlicsMu.Lock()
+		garlics[addr] = g
+		garlicsMu.Unlock()
 	}
-	garlicsMu.Lock()
-	garlics[addr] = g
-	garlicsMu.Unlock()
+
 	log.WithField("address", addr).Debug("Attempting to dial")
 	conn, err := g.Dial(network, addr)
 	if err != nil {

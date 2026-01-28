@@ -250,8 +250,8 @@ func (h *HybridSession) datagram2ReceiveLoop() {
 // When a datagram3 is received, it attempts to resolve the sender hash using the
 // mapping table and forwards the message to the unified receive channel.
 func (h *HybridSession) datagram3ReceiveLoop() {
-	// Create a reader for continuous datagram3 reception
-	reader := h.datagram3Sub.NewReader()
+	// Use the pre-allocated reader from initializeReceivers()
+	reader := h.datagram3Reader
 
 	for {
 		select {
