@@ -71,6 +71,7 @@ func TestBareOnion(t *testing.T) {
 	resp, err := client.Get("https://" + listener.Addr().String() + "/")
 	if err != nil {
 		t.Error(err)
+		return
 	}
 	defer resp.Body.Close()
 	log.WithField("status", resp.Status).Debug("HTTP response received")

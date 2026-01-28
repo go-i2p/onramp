@@ -32,7 +32,9 @@ type Onion struct {
 	*tor.ListenConf
 	*tor.DialConf
 	context.Context
-	name string
+	name     string
+	hasRefMu sync.Mutex // Protects hasRef flag
+	hasRef   bool       // Tracks if this Onion instance has registered with torpRefs
 }
 
 func (o *Onion) getStartConf() *tor.StartConf {
@@ -71,6 +73,11 @@ func (o *Onion) getDialConf() *tor.DialConf {
 }
 
 func (o *Onion) getTor() (*tor.Tor, error) {
+	// Check if this Onion instance already has a reference
+	o.hasRefMu.Lock()
+	alreadyHasRef := o.hasRef
+	o.hasRefMu.Unlock()
+
 	torpMu.Lock()
 	defer torpMu.Unlock()
 
@@ -84,8 +91,15 @@ func (o *Onion) getTor() (*tor.Tor, error) {
 		}
 		log.Debug("Tor instance started successfully")
 	}
-	torpRefs++
-	log.WithField("refs", torpRefs).Debug("Incremented Tor reference count")
+
+	// Only increment reference count once per Onion instance
+	if !alreadyHasRef {
+		o.hasRefMu.Lock()
+		o.hasRef = true
+		o.hasRefMu.Unlock()
+		torpRefs++
+		log.WithField("refs", torpRefs).Debug("Incremented Tor reference count")
+	}
 	return torp, nil
 }
 
@@ -218,6 +232,19 @@ func (o *Onion) Dial(net, addr string) (net.Conn, error) {
 // The shared Tor instance is only closed when all Onion instances have called Close().
 func (o *Onion) Close() error {
 	log.WithField("name", o.getName()).Debug("Closing Onion service")
+
+	// Check if this instance has a reference to decrement
+	o.hasRefMu.Lock()
+	hasRef := o.hasRef
+	if hasRef {
+		o.hasRef = false // Mark as no longer having a reference
+	}
+	o.hasRefMu.Unlock()
+
+	if !hasRef {
+		log.Debug("Onion instance has no Tor reference, nothing to close")
+		return nil
+	}
 
 	torpMu.Lock()
 	defer torpMu.Unlock()
