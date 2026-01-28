@@ -39,10 +39,30 @@ func GetJoinedWD(dir string) (string, error) {
 }
 
 var (
-	i2pdefault, _ = GetJoinedWD("i2pkeys")
-	tordefault, _ = GetJoinedWD("onionkeys")
-	tlsdefault, _ = GetJoinedWD("tlskeys")
+	// Default keystore paths. Errors during initialization are logged.
+	// If initialization fails, paths will be empty strings and
+	// the corresponding *KeystorePath() functions will attempt
+	// to create the directories on first use.
+	i2pdefault = initKeystorePath("i2pkeys")
+	tordefault = initKeystorePath("onionkeys")
+	tlsdefault = initKeystorePath("tlskeys")
 )
+
+// initKeystorePath attempts to initialize a keystore path at package load time.
+// If initialization fails, it logs the error and returns an empty string.
+// The corresponding *KeystorePath() functions will retry directory creation.
+func initKeystorePath(dir string) string {
+	path, err := GetJoinedWD(dir)
+	if err != nil {
+		// Log the error during initialization - this helps diagnose
+		// issues when the working directory is inaccessible.
+		// The keystore path functions will retry on first use.
+		log.WithError(err).WithField("directory", dir).Warn(
+			"Failed to initialize keystore path at startup, will retry on first use")
+		return ""
+	}
+	return path
+}
 
 // I2P_KEYSTORE_PATH is the place where I2P Keys will be saved.
 // it defaults to the directory "i2pkeys" current working directory.

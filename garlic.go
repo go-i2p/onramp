@@ -677,16 +677,21 @@ func I2PKeys(tunName, samAddr string) (i2pkeys.I2PKeys, error) {
 	keyspath := filepath.Join(keystore, tunName+".i2p.private")
 	log.WithField("path", keyspath).Debug("Checking for existing keys")
 	info, err := os.Stat(keyspath)
-	if info != nil {
-		if info.Size() == 0 {
-			log.WithField("path", keyspath).Debug("Keystore empty, will regenerate keys")
-			log.Println("onramp I2PKeys: keystore empty, re-generating keys")
-		} else {
-			log.WithField("path", keyspath).Debug("Found existing keystore")
-		}
+
+	// Determine if we need to generate new keys:
+	// - File doesn't exist (err != nil)
+	// - File exists but is empty (size == 0)
+	needNewKeys := err != nil
+	if info != nil && info.Size() == 0 {
+		log.WithField("path", keyspath).Debug("Keystore empty, will regenerate keys")
+		log.Println("onramp I2PKeys: keystore empty, re-generating keys")
+		needNewKeys = true
+	} else if info != nil {
+		log.WithField("path", keyspath).Debug("Found existing keystore")
 	}
-	if err != nil {
-		log.WithField("path", keyspath).Debug("Keys not found, generating new keys")
+
+	if needNewKeys {
+		log.WithField("path", keyspath).Debug("Keys not found or empty, generating new keys")
 		sam, err := sam3.NewSAM(samAddr)
 		if err != nil {
 			log.WithError(err).Error("Failed to create SAM connection")
@@ -705,16 +710,17 @@ func I2PKeys(tunName, samAddr string) (i2pkeys.I2PKeys, error) {
 		}
 		log.WithField("path", keyspath).Debug("Successfully stored new keys")
 		return keys, nil
-	} else {
-		log.WithField("path", keyspath).Debug("Loading existing keys")
-		keys, err := i2pkeys.LoadKeys(keyspath)
-		if err != nil {
-			log.WithError(err).WithField("path", keyspath).Error("Failed to load existing keys")
-			return i2pkeys.I2PKeys{}, fmt.Errorf("onramp I2PKeys: load error %v", err)
-		}
-		log.Debug("Successfully loaded existing keys")
-		return keys, nil
 	}
+
+	// Load existing keys
+	log.WithField("path", keyspath).Debug("Loading existing keys")
+	keys, err := i2pkeys.LoadKeys(keyspath)
+	if err != nil {
+		log.WithError(err).WithField("path", keyspath).Error("Failed to load existing keys")
+		return i2pkeys.I2PKeys{}, fmt.Errorf("onramp I2PKeys: load error %v", err)
+	}
+	log.Debug("Successfully loaded existing keys")
+	return keys, nil
 }
 
 // garlics stores managed Garlic instances for package-level functions.
