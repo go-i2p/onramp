@@ -80,6 +80,57 @@ func main() {
 }
 ```
 
+### Hybrid2 Datagram Protocol (Advanced):
+
+The `hybrid2` sub-package provides an efficient datagram protocol for I2P
+that balances authentication overhead with throughput. It uses a 1:99 ratio
+of authenticated (datagram2) to low-overhead (datagram3) messages.
+
+```Go
+package main
+
+import (
+	"log"
+
+	"github.com/go-i2p/onramp"
+	"github.com/go-i2p/onramp/hybrid2"
+)
+
+func main() {
+	// Create a Garlic instance for I2P connectivity
+	garlic := &onramp.Garlic{}
+	defer garlic.Close()
+
+	// Create a hybrid session using the garlic integration helper
+	integration, err := hybrid2.NewGarlicIntegration(garlic, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer integration.Close()
+
+	// Get a standard net.PacketConn for UDP-like operations
+	conn := integration.PacketConn()
+
+	// Set read deadline for timeout support
+	conn.SetReadDeadline(time.Now().Add(30 * time.Second))
+
+	// Use like any other PacketConn
+	buf := make([]byte, 4096)
+	n, addr, err := conn.ReadFrom(buf)
+	if err != nil {
+		log.Printf("Read error: %v", err)
+		return
+	}
+	log.Printf("Received %d bytes from %s", n, addr)
+}
+```
+
+The hybrid2 protocol automatically:
+- Sends authenticated datagram2 messages every 100th send (configurable)
+- Sends low-overhead datagram3 messages for all other sends
+- Maintains sender hash mappings for efficient message routing
+- Provides deadline support via `SetReadDeadline()` and `SetWriteDeadline()`
+
 ## Verbosity ##
 
 Logging is provided by the `github.com/go-i2p/logger` package, which offers structured logging with advanced debugging features.

@@ -338,6 +338,29 @@ func (h *HybridSession) ReceiveDatagram() (*HybridDatagram, error) {
 	}
 }
 
+// ReceiveDatagramTimeout receives the next datagram with a timeout.
+// Returns ErrTimeout if the timeout expires before a datagram is received.
+func (h *HybridSession) ReceiveDatagramTimeout(timeout time.Duration) (*HybridDatagram, error) {
+	h.closeMu.RLock()
+	if h.closed {
+		h.closeMu.RUnlock()
+		return nil, ErrSessionClosed
+	}
+	h.closeMu.RUnlock()
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
+	select {
+	case dg := <-h.recvChan:
+		return dg, nil
+	case err := <-h.recvErrChan:
+		return nil, err
+	case <-timer.C:
+		return nil, ErrTimeout
+	}
+}
+
 // stopReceiveLoops signals the receive loops to stop and waits for cleanup.
 func (h *HybridSession) stopReceiveLoops() {
 	// Signal loops to stop

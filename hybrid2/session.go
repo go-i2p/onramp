@@ -195,8 +195,29 @@ func (h *HybridSession) PacketConn() net.PacketConn {
 
 // ReadFrom implements net.PacketConn.ReadFrom.
 // It receives a datagram and returns the data and source address.
+// Respects the read deadline set via SetReadDeadline or SetDeadline.
 func (c *HybridPacketConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
-	dg, err := c.session.ReceiveDatagram()
+	// Check for deadline
+	c.deadlineMu.RLock()
+	deadline := c.readDeadline
+	c.deadlineMu.RUnlock()
+
+	var dg *HybridDatagram
+
+	if deadline.IsZero() {
+		// No deadline, block indefinitely
+		dg, err = c.session.ReceiveDatagram()
+	} else {
+		// Calculate timeout duration
+		timeout := time.Until(deadline)
+		if timeout <= 0 {
+			return 0, nil, ErrTimeout
+		}
+
+		// Use ReceiveDatagramTimeout for deadline support
+		dg, err = c.session.ReceiveDatagramTimeout(timeout)
+	}
+
 	if err != nil {
 		return 0, nil, err
 	}
@@ -238,23 +259,32 @@ func (c *HybridPacketConn) LocalAddr() net.Addr {
 }
 
 // SetDeadline implements net.PacketConn.SetDeadline.
-// Note: Deadlines are not fully implemented for I2P datagrams.
+// Sets both read and write deadlines for this connection.
 func (c *HybridPacketConn) SetDeadline(t time.Time) error {
-	// TODO: Implement deadline support
+	c.deadlineMu.Lock()
+	defer c.deadlineMu.Unlock()
+	c.readDeadline = t
+	c.writeDeadline = t
 	return nil
 }
 
 // SetReadDeadline implements net.PacketConn.SetReadDeadline.
-// Note: Deadlines are not fully implemented for I2P datagrams.
+// Sets the deadline for future ReadFrom calls.
+// A zero value for t means ReadFrom will not time out.
 func (c *HybridPacketConn) SetReadDeadline(t time.Time) error {
-	// TODO: Implement read deadline support
+	c.deadlineMu.Lock()
+	defer c.deadlineMu.Unlock()
+	c.readDeadline = t
 	return nil
 }
 
 // SetWriteDeadline implements net.PacketConn.SetWriteDeadline.
-// Note: Deadlines are not fully implemented for I2P datagrams.
+// Sets the deadline for future WriteTo calls.
+// A zero value for t means WriteTo will not time out.
 func (c *HybridPacketConn) SetWriteDeadline(t time.Time) error {
-	// TODO: Implement write deadline support
+	c.deadlineMu.Lock()
+	defer c.deadlineMu.Unlock()
+	c.writeDeadline = t
 	return nil
 }
 

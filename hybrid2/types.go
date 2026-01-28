@@ -19,6 +19,9 @@ var ErrSessionClosed = errors.New("hybrid2: session is closed")
 // ErrSourceNotFound is returned when a datagram3 source hash cannot be resolved.
 var ErrSourceNotFound = errors.New("hybrid2: source hash not found in mapping")
 
+// ErrTimeout is returned when a read or write operation exceeds its deadline.
+var ErrTimeout = errors.New("hybrid2: operation timed out")
+
 // SenderHash represents a 32-byte hash derived from a datagram source.
 // This hash is used by datagram3 for sender identification and is resolved
 // to a full destination address using mappings established by datagram2.
@@ -133,6 +136,11 @@ type HybridSession struct {
 // This allows the hybrid session to be used with standard Go networking patterns.
 type HybridPacketConn struct {
 	session *HybridSession
+
+	// Deadline support
+	readDeadline  time.Time
+	writeDeadline time.Time
+	deadlineMu    sync.RWMutex
 }
 
 // HybridAddr wraps an I2P address for the net.Addr interface.
