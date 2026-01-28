@@ -150,3 +150,28 @@ func (h *HybridSession) GetSenderCounter(dest i2pkeys.I2PAddr) uint64 {
 	}
 	return 0
 }
+
+// SendDatagramTimeout sends data to the specified destination with a timeout.
+// If the timeout is zero or negative, it behaves like SendDatagram (no timeout).
+// Returns ErrTimeout if the operation exceeds the specified timeout duration.
+func (h *HybridSession) SendDatagramTimeout(data []byte, dest i2pkeys.I2PAddr, timeout time.Duration) error {
+	// If no timeout specified, use regular send
+	if timeout <= 0 {
+		return h.SendDatagram(data, dest)
+	}
+
+	// Use a channel to receive the result from the send goroutine
+	done := make(chan error, 1)
+
+	go func() {
+		done <- h.SendDatagram(data, dest)
+	}()
+
+	// Wait for either completion or timeout
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(timeout):
+		return ErrTimeout
+	}
+}

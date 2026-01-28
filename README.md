@@ -91,18 +91,15 @@ package main
 
 import (
 	"log"
+	"time"
 
-	"github.com/go-i2p/onramp"
 	"github.com/go-i2p/onramp/hybrid2"
 )
 
 func main() {
-	// Create a Garlic instance for I2P connectivity
-	garlic := &onramp.Garlic{}
-	defer garlic.Close()
-
 	// Create a hybrid session using the garlic integration helper
-	integration, err := hybrid2.NewGarlicIntegration(garlic, nil)
+	// This connects to the local SAM bridge and creates I2P tunnels
+	integration, err := hybrid2.NewGarlicIntegration("127.0.0.1:7656", "my-hybrid")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -126,7 +123,7 @@ func main() {
 ```
 
 The hybrid2 protocol automatically:
-- Sends authenticated datagram2 messages every 100th send (configurable)
+- Sends authenticated datagram2 messages every 100th send
 - Sends low-overhead datagram3 messages for all other sends
 - Maintains sender hash mappings for efficient message routing
 - Provides deadline support via `SetReadDeadline()` and `SetWriteDeadline()`

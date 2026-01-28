@@ -242,6 +242,66 @@ func TestErrors(t *testing.T) {
 	if ErrSourceNotFound == nil {
 		t.Error("ErrSourceNotFound should not be nil")
 	}
+	if ErrTimeout == nil {
+		t.Error("ErrTimeout should not be nil")
+	}
+}
+
+// TestHybridPacketConnDeadlines tests deadline setting and retrieval.
+func TestHybridPacketConnDeadlines(t *testing.T) {
+	// Create a minimal HybridPacketConn for deadline testing
+	// Note: We can't fully test WriteTo without a real session,
+	// but we can test the deadline storage and retrieval logic.
+	conn := &HybridPacketConn{}
+
+	// Test SetReadDeadline
+	readDeadline := time.Now().Add(10 * time.Second)
+	if err := conn.SetReadDeadline(readDeadline); err != nil {
+		t.Errorf("SetReadDeadline returned error: %v", err)
+	}
+	conn.deadlineMu.RLock()
+	if !conn.readDeadline.Equal(readDeadline) {
+		t.Error("Read deadline was not set correctly")
+	}
+	conn.deadlineMu.RUnlock()
+
+	// Test SetWriteDeadline
+	writeDeadline := time.Now().Add(20 * time.Second)
+	if err := conn.SetWriteDeadline(writeDeadline); err != nil {
+		t.Errorf("SetWriteDeadline returned error: %v", err)
+	}
+	conn.deadlineMu.RLock()
+	if !conn.writeDeadline.Equal(writeDeadline) {
+		t.Error("Write deadline was not set correctly")
+	}
+	conn.deadlineMu.RUnlock()
+
+	// Test SetDeadline (sets both)
+	bothDeadline := time.Now().Add(30 * time.Second)
+	if err := conn.SetDeadline(bothDeadline); err != nil {
+		t.Errorf("SetDeadline returned error: %v", err)
+	}
+	conn.deadlineMu.RLock()
+	if !conn.readDeadline.Equal(bothDeadline) {
+		t.Error("SetDeadline did not set read deadline")
+	}
+	if !conn.writeDeadline.Equal(bothDeadline) {
+		t.Error("SetDeadline did not set write deadline")
+	}
+	conn.deadlineMu.RUnlock()
+
+	// Test zero deadline (clears deadline)
+	if err := conn.SetDeadline(time.Time{}); err != nil {
+		t.Errorf("SetDeadline with zero time returned error: %v", err)
+	}
+	conn.deadlineMu.RLock()
+	if !conn.readDeadline.IsZero() {
+		t.Error("Zero deadline should clear read deadline")
+	}
+	if !conn.writeDeadline.IsZero() {
+		t.Error("Zero deadline should clear write deadline")
+	}
+	conn.deadlineMu.RUnlock()
 }
 
 // BenchmarkComputeSenderHash benchmarks hash computation.

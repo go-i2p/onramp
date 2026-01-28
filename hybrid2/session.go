@@ -229,6 +229,7 @@ func (c *HybridPacketConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) 
 
 // WriteTo implements net.PacketConn.WriteTo.
 // It sends a datagram using the hybrid protocol.
+// Respects the write deadline set via SetWriteDeadline or SetDeadline.
 func (c *HybridPacketConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	// Extract I2P address from the net.Addr
 	var dest i2pkeys.I2PAddr
@@ -242,9 +243,29 @@ func (c *HybridPacketConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		dest = i2pkeys.I2PAddr(addr.String())
 	}
 
-	if err := c.session.SendDatagram(p, dest); err != nil {
-		return 0, err
+	// Check for write deadline
+	c.deadlineMu.RLock()
+	deadline := c.writeDeadline
+	c.deadlineMu.RUnlock()
+
+	if deadline.IsZero() {
+		// No deadline, send without timeout
+		if err := c.session.SendDatagram(p, dest); err != nil {
+			return 0, err
+		}
+	} else {
+		// Calculate timeout duration from deadline
+		timeout := time.Until(deadline)
+		if timeout <= 0 {
+			return 0, ErrTimeout
+		}
+
+		// Use timeout-aware send
+		if err := c.session.SendDatagramTimeout(p, dest, timeout); err != nil {
+			return 0, err
+		}
 	}
+
 	return len(p), nil
 }
 

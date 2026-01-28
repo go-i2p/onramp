@@ -600,6 +600,22 @@ func (g *Garlic) DeleteKeys() error {
 	return nil
 }
 
+// Primary returns the underlying PRIMARY session for this Garlic instance.
+// If the PRIMARY session has not been created yet, it will be initialized.
+// This is useful for integrating with packages like hybrid2 that need
+// direct access to the PRIMARY session.
+//
+// Note: PRIMARY session creation takes 2-5 minutes for I2P tunnel establishment.
+func (g *Garlic) Primary() (*primary.PrimarySession, error) {
+	// Ensure SAM connection exists
+	var err error
+	if g.SAM, err = g.samSession(); err != nil {
+		return nil, fmt.Errorf("onramp Primary: %v", err)
+	}
+	// Return the primary session (creating it if necessary)
+	return g.setupPrimarySession()
+}
+
 // NewGarlic returns a new Garlic struct. It is immediately ready to use with
 // I2P streaming using SAMv3.3 PRIMARY sessions.
 //
