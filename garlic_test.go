@@ -4,12 +4,14 @@
 package onramp
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -42,11 +44,26 @@ func TestBareGarlic(t *testing.T) {
 		Handler: mux,
 	}
 
+	// Use WaitGroup to track when server goroutine completes
+	var wg sync.WaitGroup
+	wg.Add(1)
+
 	go func() {
+		defer wg.Done()
 		log.Debug("Starting HTTP server")
 		if err := server.Serve(listener); err != nil && err != http.ErrServerClosed {
 			log.WithError(err).Error("HTTP server error")
 		}
+	}()
+
+	// Ensure we shutdown server and wait for goroutine before test exits
+	defer func() {
+		// Gracefully shutdown the server with timeout
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer shutdownCancel()
+		server.Shutdown(shutdownCtx)
+		// Wait for server goroutine to complete
+		wg.Wait()
 	}()
 
 	// Give the HTTP server time to start accepting connections
@@ -115,6 +132,7 @@ func TestBareGarlic(t *testing.T) {
 			InsecureSkipVerify: true,
 		},
 	}
+	defer transport.CloseIdleConnections() // Close connection pool to prevent I/O leak
 	client := &http.Client{
 		Transport: &transport,
 	}

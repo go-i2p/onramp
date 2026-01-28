@@ -2,6 +2,7 @@ package hybrid2
 
 import (
 	"errors"
+	"net"
 	"sync"
 	"time"
 
@@ -170,6 +171,6 @@ type HybridReceiver interface {
 }
 
 // Compile-time interface assertions - uncomment when implementations are complete:
-// var _ net.PacketConn = (*HybridPacketConn)(nil)
-// var _ HybridSender = (*HybridSession)(nil)
-// var _ HybridReceiver = (*HybridSession)(nil)
+var _ net.PacketConn = (*HybridPacketConn)(nil)
+var _ HybridSender = (*HybridSession)(nil)
+var _ HybridReceiver = (*HybridSession)(nil)

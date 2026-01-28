@@ -26,6 +26,7 @@ func TestBareOnion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer listener.Close()
 	log.WithField("listener_address", listener.Addr().String()).Debug("Onion listener created")
 
 	mux := http.NewServeMux()
@@ -63,6 +64,7 @@ func TestBareOnion(t *testing.T) {
 			InsecureSkipVerify: true,
 		},
 	}
+	defer transport.CloseIdleConnections() // Close connection pool to prevent I/O leak
 	client := &http.Client{
 		Transport: &transport,
 	}
