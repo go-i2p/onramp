@@ -18,6 +18,7 @@ import (
 	"github.com/go-i2p/go-sam-go/primary"
 	"github.com/go-i2p/i2pkeys"
 	"github.com/go-i2p/logger"
+	"github.com/go-i2p/onramp/hybrid2"
 )
 
 // Garlic is a ready-made I2P streaming manager. Once initialized it always
@@ -29,9 +30,9 @@ type Garlic struct {
 	*embedding.Bridge
 	// PRIMARY session fields (SAMv3.3+)
 	// These enable efficient tunnel sharing across multiple subsessions
-	primary     *primary.PrimarySession     // Master session managing shared tunnels
-	streamSub   *primary.StreamSubSession   // Stream subsession for TCP-like connections
-	datagramSub *primary.DatagramSubSession // Datagram subsession for UDP-like messaging
+	primary    *primary.PrimarySession   // Master session managing shared tunnels
+	streamSub  *primary.StreamSubSession // Stream subsession for TCP-like connections
+	hybrid2Sub *hybrid2.HybridSession    // Hybrid2 session for efficient datagram messaging
 
 	// Common fields
 	ServiceKeys *i2pkeys.I2PKeys
@@ -55,6 +56,9 @@ const (
 func (g *Garlic) Network() string {
 	if g.streamSub != nil {
 		return "i2p-stream"
+	}
+	if g.hybrid2Sub != nil {
+		return "i2p-hybrid2"
 	}
 	return "i2p-datagram"
 }
@@ -121,11 +125,11 @@ func (g *Garlic) getStreamSubID() string {
 	return g.getName() + "-stream"
 }
 
-// getDatagramSubID returns a unique ID for the datagram subsession.
+// getHybrid2ID returns a unique ID for the hybrid2 session.
 // The ID is based on the tunnel name to ensure uniqueness while remaining
 // predictable for debugging purposes.
-func (g *Garlic) getDatagramSubID() string {
-	return g.getName() + "-datagram"
+func (g *Garlic) getHybrid2ID() string {
+	return g.getName() + "-hybrid2"
 }
 
 func (g *Garlic) samSession() (*sam3.SAM, error) {
@@ -219,38 +223,36 @@ func (g *Garlic) setupStreamSubSession() (*primary.StreamSubSession, error) {
 	return g.streamSub, nil
 }
 
-// setupDatagramSubSession creates or returns the datagram subsession.
-// This method creates a datagram subsession attached to the PRIMARY session,
-// enabling UDP-like messaging that shares the PRIMARY session's tunnels.
+// setupHybrid2Session creates or returns the hybrid2 session.
+// This method creates a hybrid2 session attached to the PRIMARY session,
+// enabling efficient datagram messaging using the 1:99 hybrid protocol.
 //
-// Datagram subsessions use authenticated messaging (DATAGRAM protocol) which
-// includes full source destination information. Per SAMv3.3 specification,
-// DATAGRAM subsessions require a PORT parameter. If not provided, PORT=0
-// (any port) is added automatically.
+// The hybrid2 protocol sends authenticated datagram2 messages every 100th
+// message (for hash-to-address mapping) and uses low-overhead datagram3
+// for the remaining 99 messages.
 //
-// Returns the datagram subsession or an error if creation fails.
-func (g *Garlic) setupDatagramSubSession() (*primary.DatagramSubSession, error) {
-	if g.datagramSub == nil {
-		log.WithField("name", g.getName()).Debug("Setting up datagram subsession")
+// Returns the hybrid2 session or an error if creation fails.
+func (g *Garlic) setupHybrid2Session() (*hybrid2.HybridSession, error) {
+	if g.hybrid2Sub == nil {
+		log.WithField("name", g.getName()).Debug("Setting up hybrid2 session")
 
 		// Ensure PRIMARY session exists first
 		if _, err := g.setupPrimarySession(); err != nil {
 			return nil, err
 		}
 
-		// Create datagram subsession with PORT=0 (any port)
-		// Per SAMv3.3 spec, DATAGRAM subsessions require a PORT parameter
+		// Create hybrid2 session with options
 		var err error
 		subOpts := append(g.getOptions(), "PORT=0")
-		g.datagramSub, err = g.primary.NewDatagramSubSession(g.getDatagramSubID(), subOpts)
+		g.hybrid2Sub, err = hybrid2.NewHybridSession(g.primary, g.getHybrid2ID(), hybrid2.WithOptions(subOpts))
 		if err != nil {
-			log.WithError(err).Error("Failed to create datagram subsession")
-			return nil, fmt.Errorf("onramp setupDatagramSubSession: %v", err)
+			log.WithError(err).Error("Failed to create hybrid2 session")
+			return nil, fmt.Errorf("onramp setupHybrid2Session: %v", err)
 		}
 
-		log.Debug("Datagram subsession created successfully")
+		log.Debug("Hybrid2 session created successfully")
 	}
-	return g.datagramSub, nil
+	return g.hybrid2Sub, nil
 }
 
 // NewListener returns a net.Listener for the Garlic structure's I2P keys.
@@ -352,9 +354,10 @@ func (g *Garlic) ListenStream() (net.Listener, error) {
 }
 
 // ListenPacket returns a net.PacketConn for the Garlic structure's I2P keys.
-// This method now uses PRIMARY sessions with datagram subsessions for efficient
-// tunnel sharing. The datagram subsession provides authenticated UDP-like messaging
-// that shares tunnels with other subsessions.
+// This method now uses the hybrid2 protocol for efficient datagram messaging.
+// The hybrid2 session uses a 1:99 ratio of authenticated datagram2 messages
+// to low-overhead datagram3 messages, optimizing bandwidth while maintaining
+// address resolution capabilities.
 func (g *Garlic) ListenPacket() (net.PacketConn, error) {
 	log.Debug("Setting up packet connection")
 	var err error
@@ -365,15 +368,15 @@ func (g *Garlic) ListenPacket() (net.PacketConn, error) {
 		return nil, fmt.Errorf("onramp ListenPacket: %v", err)
 	}
 
-	// Setup datagram subsession (which ensures PRIMARY session exists)
-	if g.datagramSub, err = g.setupDatagramSubSession(); err != nil {
-		log.WithError(err).Error("Failed to setup datagram subsession")
+	// Setup hybrid2 session (which ensures PRIMARY session exists)
+	if g.hybrid2Sub, err = g.setupHybrid2Session(); err != nil {
+		log.WithError(err).Error("Failed to setup hybrid2 session")
 		return nil, fmt.Errorf("onramp ListenPacket: %v", err)
 	}
 
 	log.Debug("Packet connection successfully established")
-	// DatagramSession from subsession is already a PacketConn
-	return g.datagramSub.DatagramSession, nil
+	// Return hybrid2 PacketConn which multiplexes datagram2/datagram3
+	return g.hybrid2Sub.PacketConn(), nil
 }
 
 // ListenTLS returns a net.Listener for the Garlic structure's I2P keys,
@@ -407,13 +410,14 @@ func (g *Garlic) ListenTLS(args ...string) (net.Listener, error) {
 			//} else if args[0] == "udp" || args[0] == "udp6" || args[0] == "dg" || args[0] == "dg6" {
 		} else if protocol == "udp" || protocol == "udp6" || protocol == "dg" || protocol == "dg6" {
 			log.Debug("Creating TLS datagram listener")
-			// Get datagram subsession
+			// Get hybrid2 session
 			var err error
-			if g.datagramSub, err = g.setupDatagramSubSession(); err != nil {
-				log.WithError(err).Error("Failed to setup datagram subsession")
+			if g.hybrid2Sub, err = g.setupHybrid2Session(); err != nil {
+				log.WithError(err).Error("Failed to setup hybrid2 session")
 				return nil, fmt.Errorf("onramp ListenTLS: %v", err)
 			}
-			ln, err := g.datagramSub.DatagramSession.Listen()
+			// Use the underlying datagram2 subsession for Listen() compatibility
+			ln, err := g.hybrid2Sub.Datagram2Sub().DatagramSession.Listen()
 			if err != nil {
 				log.WithError(err).Error("Failed to create datagram listener")
 				return nil, err
@@ -519,6 +523,16 @@ func (g *Garlic) Close() error {
 
 	var errors []error
 
+	// Close hybrid2 session (closes its subsessions)
+	if g.hybrid2Sub != nil {
+		if err := g.hybrid2Sub.Close(); err != nil {
+			log.WithError(err).Error("Failed to close hybrid2 session")
+			errors = append(errors, fmt.Errorf("hybrid2 session: %v", err))
+		} else {
+			log.Debug("Hybrid2 session closed successfully")
+		}
+	}
+
 	// Close PRIMARY session (automatically closes all subsessions)
 	if g.primary != nil {
 		if err := g.primary.Close(); err != nil {
@@ -542,7 +556,7 @@ func (g *Garlic) Close() error {
 	// Clear references
 	g.primary = nil
 	g.streamSub = nil
-	g.datagramSub = nil
+	g.hybrid2Sub = nil
 
 	if len(errors) > 0 {
 		return fmt.Errorf("onramp Close: %v", errors)

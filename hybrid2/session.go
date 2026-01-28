@@ -1,0 +1,297 @@
+package hybrid2
+
+import (
+	"fmt"
+	"net"
+	"sync"
+	"time"
+
+	"github.com/go-i2p/go-sam-go/common"
+	"github.com/go-i2p/go-sam-go/primary"
+	"github.com/go-i2p/i2pkeys"
+)
+
+// SessionOption is a function that configures a HybridSession.
+type SessionOption func(*HybridSession)
+
+// WithOptions sets SAM session options for the subsessions.
+func WithOptions(options []string) SessionOption {
+	return func(s *HybridSession) {
+		s.options = options
+	}
+}
+
+// NewHybridSession creates a new HybridSession from a PrimarySession.
+// The hybrid session creates both datagram2 and datagram3 subsessions
+// for efficient hybrid protocol communication.
+//
+// The session automatically manages:
+//   - Sender state (counter tracking per destination)
+//   - Receiver state (hash-to-destination mappings)
+//   - Background receive loops with channel multiplexing
+//   - Cleanup of expired mappings
+//
+// Example usage:
+//
+//	primary, err := primary.NewPrimarySession(sam, "my-session", keys, nil)
+//	if err != nil {
+//	    // handle error
+//	}
+//	hybrid, err := NewHybridSession(primary, "hybrid", WithOptions([]string{"inbound.length=1"}))
+//	if err != nil {
+//	    // handle error
+//	}
+//	defer hybrid.Close()
+func NewHybridSession(primarySession *primary.PrimarySession, id string, opts ...SessionOption) (*HybridSession, error) {
+	session := &HybridSession{
+		primary:      primarySession,
+		id:           id,
+		senderStates: make(map[string]*SenderState),
+		receiverMap:  make(map[SenderHash]*ReceiverMapping),
+		cleanupDone:  make(chan struct{}),
+	}
+
+	// Apply options
+	for _, opt := range opts {
+		opt(session)
+	}
+
+	// Create datagram2 subsession for authenticated messaging
+	datagram2SubID := id + "-dg2"
+	datagram2Sub, err := primarySession.NewDatagramSubSession(datagram2SubID, session.options)
+	if err != nil {
+		return nil, fmt.Errorf("creating datagram2 subsession: %w", err)
+	}
+	session.datagram2Sub = datagram2Sub
+
+	// Create datagram3 subsession for low-overhead bulk messaging
+	datagram3SubID := id + "-dg3"
+	datagram3Sub, err := primarySession.NewDatagram3SubSession(datagram3SubID, session.options)
+	if err != nil {
+		// Clean up the datagram2 subsession on failure
+		datagram2Sub.Close()
+		return nil, fmt.Errorf("creating datagram3 subsession: %w", err)
+	}
+	session.datagram3Sub = datagram3Sub
+
+	// Set local address from primary session
+	session.localAddr = primarySession.Addr()
+
+	// Initialize receiver infrastructure
+	if err := session.initializeReceivers(); err != nil {
+		session.closeSubsessions()
+		return nil, fmt.Errorf("initializing receivers: %w", err)
+	}
+
+	// Start background receive loops
+	session.startReceiveLoops()
+
+	return session, nil
+}
+
+// NewHybridSessionFromSAM creates a new HybridSession with a fresh PrimarySession.
+// This is a convenience function that creates the primary session automatically.
+//
+// Example usage:
+//
+//	hybrid, err := NewHybridSessionFromSAM(sam, "my-hybrid", keys, nil)
+//	if err != nil {
+//	    // handle error
+//	}
+//	defer hybrid.Close()
+func NewHybridSessionFromSAM(sam *common.SAM, id string, keys i2pkeys.I2PKeys, opts ...SessionOption) (*HybridSession, error) {
+	// Create primary session
+	primarySession, err := primary.NewPrimarySession(sam, id, keys, nil)
+	if err != nil {
+		return nil, fmt.Errorf("creating primary session: %w", err)
+	}
+
+	// Create hybrid session using the primary
+	session, err := NewHybridSession(primarySession, id+"-hybrid", opts...)
+	if err != nil {
+		primarySession.Close()
+		return nil, err
+	}
+
+	// Store SAM reference
+	session.sam = sam
+
+	return session, nil
+}
+
+// closeSubsessions closes both datagram subsessions.
+func (h *HybridSession) closeSubsessions() {
+	if h.datagram2Sub != nil {
+		h.datagram2Sub.Close()
+	}
+	if h.datagram3Sub != nil {
+		h.datagram3Sub.Close()
+	}
+}
+
+// Close closes the hybrid session and all associated resources.
+// This method:
+//   - Stops receive loops
+//   - Cleans up receiver state
+//   - Closes both datagram subsessions
+//   - Marks the session as closed
+//
+// After Close() is called, all operations on this session will return ErrSessionClosed.
+func (h *HybridSession) Close() error {
+	h.closeMu.Lock()
+	if h.closed {
+		h.closeMu.Unlock()
+		return nil // Already closed
+	}
+	h.closed = true
+	h.closeMu.Unlock()
+
+	// Stop receive loops and cleanup
+	h.stopReceiveLoops()
+
+	// Close subsessions
+	h.closeSubsessions()
+
+	// Signal cleanup is done
+	close(h.cleanupDone)
+
+	return nil
+}
+
+// ID returns the unique identifier for this hybrid session.
+func (h *HybridSession) ID() string {
+	return h.id
+}
+
+// Addr returns the local I2P address for this session.
+func (h *HybridSession) Addr() i2pkeys.I2PAddr {
+	return h.localAddr
+}
+
+// IsClosed returns whether this session has been closed.
+func (h *HybridSession) IsClosed() bool {
+	h.closeMu.RLock()
+	defer h.closeMu.RUnlock()
+	return h.closed
+}
+
+// Datagram2Sub returns the underlying datagram2 subsession.
+// Use with caution - direct access bypasses hybrid protocol logic.
+func (h *HybridSession) Datagram2Sub() *primary.DatagramSubSession {
+	return h.datagram2Sub
+}
+
+// Datagram3Sub returns the underlying datagram3 subsession.
+// Use with caution - direct access bypasses hybrid protocol logic.
+func (h *HybridSession) Datagram3Sub() *primary.Datagram3SubSession {
+	return h.datagram3Sub
+}
+
+// PacketConn returns a net.PacketConn interface for this session.
+// This allows the hybrid session to be used with standard Go networking patterns.
+func (h *HybridSession) PacketConn() net.PacketConn {
+	return &HybridPacketConn{session: h}
+}
+
+// ReadFrom implements net.PacketConn.ReadFrom.
+// It receives a datagram and returns the data and source address.
+func (c *HybridPacketConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
+	dg, err := c.session.ReceiveDatagram()
+	if err != nil {
+		return 0, nil, err
+	}
+
+	n = copy(p, dg.Data)
+	addr = &HybridAddr{dg.Source}
+	return n, addr, nil
+}
+
+// WriteTo implements net.PacketConn.WriteTo.
+// It sends a datagram using the hybrid protocol.
+func (c *HybridPacketConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
+	// Extract I2P address from the net.Addr
+	var dest i2pkeys.I2PAddr
+	switch a := addr.(type) {
+	case *HybridAddr:
+		dest = a.I2PAddr
+	case i2pkeys.I2PAddr:
+		dest = a
+	default:
+		// Try to parse as string
+		dest = i2pkeys.I2PAddr(addr.String())
+	}
+
+	if err := c.session.SendDatagram(p, dest); err != nil {
+		return 0, err
+	}
+	return len(p), nil
+}
+
+// Close implements net.PacketConn.Close.
+func (c *HybridPacketConn) Close() error {
+	return c.session.Close()
+}
+
+// LocalAddr implements net.PacketConn.LocalAddr.
+func (c *HybridPacketConn) LocalAddr() net.Addr {
+	return &HybridAddr{c.session.localAddr}
+}
+
+// SetDeadline implements net.PacketConn.SetDeadline.
+// Note: Deadlines are not fully implemented for I2P datagrams.
+func (c *HybridPacketConn) SetDeadline(t time.Time) error {
+	// TODO: Implement deadline support
+	return nil
+}
+
+// SetReadDeadline implements net.PacketConn.SetReadDeadline.
+// Note: Deadlines are not fully implemented for I2P datagrams.
+func (c *HybridPacketConn) SetReadDeadline(t time.Time) error {
+	// TODO: Implement read deadline support
+	return nil
+}
+
+// SetWriteDeadline implements net.PacketConn.SetWriteDeadline.
+// Note: Deadlines are not fully implemented for I2P datagrams.
+func (c *HybridPacketConn) SetWriteDeadline(t time.Time) error {
+	// TODO: Implement write deadline support
+	return nil
+}
+
+// SenderStateCount returns the number of destination states being tracked.
+func (h *HybridSession) SenderStateCount() int {
+	h.senderMu.RLock()
+	defer h.senderMu.RUnlock()
+	return len(h.senderStates)
+}
+
+// ReceiverMappingCount returns the number of sender hash mappings.
+func (h *HybridSession) ReceiverMappingCount() int {
+	if h.receiverState == nil {
+		return 0
+	}
+	return h.receiverState.MappingCount()
+}
+
+// WaitForClose blocks until the session is fully closed.
+func (h *HybridSession) WaitForClose() {
+	<-h.cleanupDone
+}
+
+// Ensure HybridPacketConn implements net.PacketConn
+var _ net.PacketConn = (*HybridPacketConn)(nil)
+
+// Ensure HybridSession implements the interfaces
+var _ HybridSender = (*HybridSession)(nil)
+
+// Compile-time check for HybridReceiver (requires ReceiveDatagram and LookupSender)
+// Note: ReceiveDatagram is in receiver.go, LookupSender is in receiver.go
+type hybridReceiverCheck interface {
+	ReceiveDatagram() (*HybridDatagram, error)
+	LookupSender(hash SenderHash) (i2pkeys.I2PAddr, bool)
+}
+
+var _ hybridReceiverCheck = (*HybridSession)(nil)
+
+// mu protects concurrent access during cleanup operations
+var cleanupMu sync.Mutex
