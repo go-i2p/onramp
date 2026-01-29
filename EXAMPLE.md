@@ -84,10 +84,12 @@ import (
 	"log"
 	"net"
 	"net/http"
+
+	"github.com/go-i2p/onramp"
 )
 
 func main() {
-	garlic := &Garlic{}
+	garlic := &onramp.Garlic{}
 	defer garlic.Close()
 	listener, err := garlic.Listen()
 	if err != nil {

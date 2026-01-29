@@ -1,6 +1,7 @@
 package onramp
 
 import (
+	"fmt"
 	"net"
 	"net/url"
 	"os"
@@ -83,6 +84,16 @@ var TLS_KEYSTORE_PATH = tlsdefault
 // path is not set, it returns the default path. If the path does
 // not exist, it creates it.
 func I2PKeystorePath() (string, error) {
+	// If path is empty (initialization failed), attempt to reinitialize
+	if I2P_KEYSTORE_PATH == "" {
+		log.Debug("I2P keystore path is empty, attempting to reinitialize")
+		path, err := GetJoinedWD("i2pkeys")
+		if err != nil {
+			log.WithError(err).Error("Failed to reinitialize I2P keystore path")
+			return "", fmt.Errorf("I2P keystore path is empty and reinitialization failed: %w", err)
+		}
+		I2P_KEYSTORE_PATH = path
+	}
 	log.WithField("path", I2P_KEYSTORE_PATH).Debug("Checking I2P keystore path")
 	if _, err := os.Stat(I2P_KEYSTORE_PATH); err != nil {
 		log.WithField("path", I2P_KEYSTORE_PATH).Debug("I2P keystore directory does not exist, creating")
@@ -113,6 +124,16 @@ func DeleteI2PKeyStore() error {
 // path is not set, it returns the default path. If the path does
 // not exist, it creates it.
 func TorKeystorePath() (string, error) {
+	// If path is empty (initialization failed), attempt to reinitialize
+	if ONION_KEYSTORE_PATH == "" {
+		log.Debug("Tor keystore path is empty, attempting to reinitialize")
+		path, err := GetJoinedWD("onionkeys")
+		if err != nil {
+			log.WithError(err).Error("Failed to reinitialize Tor keystore path")
+			return "", fmt.Errorf("Tor keystore path is empty and reinitialization failed: %w", err)
+		}
+		ONION_KEYSTORE_PATH = path
+	}
 	log.WithField("path", ONION_KEYSTORE_PATH).Debug("Checking Tor keystore path")
 	if _, err := os.Stat(ONION_KEYSTORE_PATH); err != nil {
 		log.WithField("path", ONION_KEYSTORE_PATH).Debug("Tor keystore directory does not exist, creating")
@@ -143,6 +164,16 @@ func DeleteTorKeyStore() error {
 // path is not set, it returns the default path. If the path does
 // not exist, it creates it.
 func TLSKeystorePath() (string, error) {
+	// If path is empty (initialization failed), attempt to reinitialize
+	if TLS_KEYSTORE_PATH == "" {
+		log.Debug("TLS keystore path is empty, attempting to reinitialize")
+		path, err := GetJoinedWD("tlskeys")
+		if err != nil {
+			log.WithError(err).Error("Failed to reinitialize TLS keystore path")
+			return "", fmt.Errorf("TLS keystore path is empty and reinitialization failed: %w", err)
+		}
+		TLS_KEYSTORE_PATH = path
+	}
 	log.WithField("path", TLS_KEYSTORE_PATH).Debug("Checking TLS keystore path")
 	if _, err := os.Stat(TLS_KEYSTORE_PATH); err != nil {
 		log.WithField("path", TLS_KEYSTORE_PATH).Debug("TLS keystore directory does not exist, creating")

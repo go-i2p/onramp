@@ -1,6 +1,7 @@
 package hybrid2
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"sync"
@@ -189,14 +190,33 @@ func (h *HybridSession) Datagram3Sub() *primary.Datagram3SubSession {
 
 // PacketConn returns a net.PacketConn interface for this session.
 // This allows the hybrid session to be used with standard Go networking patterns.
+//
+// Multiple PacketConn wrappers can be obtained from the same session.
+// Closing a PacketConn marks only that wrapper as closed; the underlying
+// session remains active. Call session.Close() to close the session itself.
 func (h *HybridSession) PacketConn() net.PacketConn {
 	return &HybridPacketConn{session: h}
+}
+
+// ErrPacketConnClosed is returned when operations are attempted on a closed PacketConn.
+var ErrPacketConnClosed = errors.New("hybrid2: packet connection is closed")
+
+// isClosed checks if this PacketConn wrapper has been closed.
+func (c *HybridPacketConn) isClosed() bool {
+	c.closedMu.RLock()
+	defer c.closedMu.RUnlock()
+	return c.closed
 }
 
 // ReadFrom implements net.PacketConn.ReadFrom.
 // It receives a datagram and returns the data and source address.
 // Respects the read deadline set via SetReadDeadline or SetDeadline.
 func (c *HybridPacketConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
+	// Check if this PacketConn is closed
+	if c.isClosed() {
+		return 0, nil, ErrPacketConnClosed
+	}
+
 	// Check for deadline
 	c.deadlineMu.RLock()
 	deadline := c.readDeadline
@@ -231,6 +251,11 @@ func (c *HybridPacketConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) 
 // It sends a datagram using the hybrid protocol.
 // Respects the write deadline set via SetWriteDeadline or SetDeadline.
 func (c *HybridPacketConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
+	// Check if this PacketConn is closed
+	if c.isClosed() {
+		return 0, ErrPacketConnClosed
+	}
+
 	// Extract I2P address from the net.Addr
 	var dest i2pkeys.I2PAddr
 	switch a := addr.(type) {
@@ -270,8 +295,14 @@ func (c *HybridPacketConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 }
 
 // Close implements net.PacketConn.Close.
+// This closes only this PacketConn wrapper, not the underlying HybridSession.
+// To close the session itself, call session.Close() directly.
+// After Close() is called, ReadFrom and WriteTo will return ErrPacketConnClosed.
 func (c *HybridPacketConn) Close() error {
-	return c.session.Close()
+	c.closedMu.Lock()
+	defer c.closedMu.Unlock()
+	c.closed = true
+	return nil
 }
 
 // LocalAddr implements net.PacketConn.LocalAddr.

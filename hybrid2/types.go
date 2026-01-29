@@ -134,6 +134,12 @@ type HybridSession struct {
 
 // HybridPacketConn implements net.PacketConn using hybrid2 logic.
 // This allows the hybrid session to be used with standard Go networking patterns.
+//
+// Note: HybridPacketConn is a lightweight wrapper around HybridSession.
+// Multiple PacketConn instances can be obtained from the same session via
+// session.PacketConn(). Closing a PacketConn marks it as closed but does NOT
+// close the underlying session. The session owner is responsible for calling
+// session.Close() when done with all operations.
 type HybridPacketConn struct {
 	session *HybridSession
 
@@ -141,6 +147,10 @@ type HybridPacketConn struct {
 	readDeadline  time.Time
 	writeDeadline time.Time
 	deadlineMu    sync.RWMutex
+
+	// Closed flag for this wrapper
+	closed   bool
+	closedMu sync.RWMutex
 }
 
 // HybridAddr wraps an I2P address for the net.Addr interface.

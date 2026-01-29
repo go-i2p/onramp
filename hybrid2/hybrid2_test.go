@@ -304,6 +304,65 @@ func TestHybridPacketConnDeadlines(t *testing.T) {
 	conn.deadlineMu.RUnlock()
 }
 
+// TestHybridPacketConnClose tests that closing a PacketConn only closes the wrapper.
+func TestHybridPacketConnClose(t *testing.T) {
+	// Create a minimal PacketConn for close testing
+	conn := &HybridPacketConn{}
+
+	// Verify not closed initially
+	if conn.isClosed() {
+		t.Error("PacketConn should not be closed initially")
+	}
+
+	// Close the connection
+	if err := conn.Close(); err != nil {
+		t.Errorf("Close returned error: %v", err)
+	}
+
+	// Verify closed after Close()
+	if !conn.isClosed() {
+		t.Error("PacketConn should be closed after Close()")
+	}
+
+	// Calling Close again should not error
+	if err := conn.Close(); err != nil {
+		t.Errorf("Second Close returned error: %v", err)
+	}
+}
+
+// TestHybridPacketConnCloseDoesNotAffectOther verifies that closing one PacketConn
+// does not affect other PacketConns from the same session.
+func TestHybridPacketConnCloseDoesNotAffectOther(t *testing.T) {
+	// Create two PacketConns (simulating multiple wrappers of same session)
+	// Note: In real use, these would share a HybridSession, but for this test
+	// we just need to verify the wrapper closure logic is independent.
+	conn1 := &HybridPacketConn{}
+	conn2 := &HybridPacketConn{}
+
+	// Close conn1
+	if err := conn1.Close(); err != nil {
+		t.Errorf("Close conn1 returned error: %v", err)
+	}
+
+	// Verify conn1 is closed but conn2 is not
+	if !conn1.isClosed() {
+		t.Error("conn1 should be closed")
+	}
+	if conn2.isClosed() {
+		t.Error("conn2 should NOT be closed when conn1 is closed")
+	}
+}
+
+// TestErrPacketConnClosed verifies the error variable is properly defined.
+func TestErrPacketConnClosed(t *testing.T) {
+	if ErrPacketConnClosed == nil {
+		t.Error("ErrPacketConnClosed should not be nil")
+	}
+	if ErrPacketConnClosed.Error() != "hybrid2: packet connection is closed" {
+		t.Errorf("Unexpected error message: %s", ErrPacketConnClosed.Error())
+	}
+}
+
 // BenchmarkComputeSenderHash benchmarks hash computation.
 func BenchmarkComputeSenderHash(b *testing.B) {
 	addr := i2pkeys.I2PAddr("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")

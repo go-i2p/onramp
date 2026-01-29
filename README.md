@@ -54,6 +54,19 @@ func main() {
 }
 ```
 
+#### Embedded SAM Bridge
+
+The `Garlic` struct supports an embedded SAM bridge feature. When `NewGarlic()` 
+is called and no external SAM bridge is listening on port 7656, onramp will 
+automatically attempt to create an embedded SAM bridge using the 
+`github.com/go-i2p/go-sam-bridge/lib/embedding` package. This allows applications 
+to operate without requiring an external I2P router in some scenarios.
+
+**Behavior:**
+- If port 7656 is already in use (external I2P router running), the embedded bridge is not created
+- If port 7656 is available, an embedded bridge is created and used automatically
+- The embedded bridge is managed by the `Garlic.Bridge` field
+
 ### Tor(Onion) Usage:
 
 When using it to manage a Tor session, set up an `onramp.Onion`
@@ -93,13 +106,15 @@ import (
 	"log"
 	"time"
 
+	"github.com/go-i2p/onramp"
 	"github.com/go-i2p/onramp/hybrid2"
 )
 
 func main() {
 	// Create a hybrid session using the garlic integration helper
 	// This connects to the local SAM bridge and creates I2P tunnels
-	integration, err := hybrid2.NewGarlicIntegration("127.0.0.1:7656", "my-hybrid")
+	// onramp.SAM_ADDR defaults to "127.0.0.1:7656"
+	integration, err := hybrid2.NewGarlicIntegration(onramp.SAM_ADDR, "my-hybrid")
 	if err != nil {
 		log.Fatal(err)
 	}
