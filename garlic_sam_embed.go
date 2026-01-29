@@ -10,7 +10,9 @@ func (g *Garlic) newEmbeddedSAMBridge() (*embedding.Bridge, error) {
 	// If port 7656 is available (nothing listening), create an embedded SAM bridge
 	// If something is already listening (external SAM bridge), return nil
 	if checkPortAvailable(g.getAddr()) {
-		bridge, err := embedding.New()
+		bridge, err := embedding.New(
+			embedding.WithListenAddr(g.getAddr()),
+		)
 		if err != nil {
 			return nil, err
 		}
