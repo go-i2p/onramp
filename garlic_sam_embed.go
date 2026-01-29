@@ -6,10 +6,10 @@ import (
 	"github.com/go-i2p/go-sam-bridge/lib/embedding"
 )
 
-func newEmbeddedSAMBridge() (*embedding.Bridge, error) {
+func (g *Garlic) newEmbeddedSAMBridge() (*embedding.Bridge, error) {
 	// If port 7656 is available (nothing listening), create an embedded SAM bridge
 	// If something is already listening (external SAM bridge), return nil
-	if checkPortAvailable("localhost:7656") {
+	if checkPortAvailable(g.getAddr()) {
 		bridge, err := embedding.New()
 		if err != nil {
 			return nil, err

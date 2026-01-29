@@ -106,7 +106,7 @@ func (g *Garlic) getName() string {
 
 func (g *Garlic) getAddr() string {
 	if g.addr == "" {
-		return "localhost:7656"
+		return SAM_ADDR
 	}
 	return g.addr
 }
@@ -639,8 +639,9 @@ func NewGarlic(tunName, samAddr string, options []string) (*Garlic, error) {
 	g.name = tunName
 	g.addr = samAddr
 	g.opts = options
+	g.addr = samAddr
 	var err error
-	g.Bridge, err = newEmbeddedSAMBridge()
+	g.Bridge, err = g.newEmbeddedSAMBridge()
 	if err != nil {
 		log.WithError(err).Error("Failed to create embedded SAM bridge")
 		return nil, fmt.Errorf("onramp NewGarlic: %v", err)
