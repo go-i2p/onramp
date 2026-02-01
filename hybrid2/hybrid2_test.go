@@ -414,7 +414,7 @@ func BenchmarkSenderStateIncrement(b *testing.B) {
 func TestTimeBasedTrigger(t *testing.T) {
 	state := &SenderState{
 		Destination:       i2pkeys.I2PAddr("test"),
-		Counter:           50, // Not at interval boundary
+		Counter:           50,                               // Not at interval boundary
 		LastDatagram2Time: time.Now().Add(-5 * time.Minute), // 5 minutes ago
 		UnackedDatagrams:  make(map[uint64]time.Time),
 	}

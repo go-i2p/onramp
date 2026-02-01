@@ -54,9 +54,9 @@ func (h *HybridSession) getSenderState(dest i2pkeys.I2PAddr) *SenderState {
 
 // shouldUseDatagram2 determines if the next message should use datagram2.
 // Returns true when ANY of these conditions are met:
-//   1. First message (counter == 0)
-//   2. Counter-based trigger (counter % RepliableInterval == 0)
-//   3. Time-based trigger (time since last datagram2 >= RepliableTimeInterval)
+//  1. First message (counter == 0)
+//  2. Counter-based trigger (counter % RepliableInterval == 0)
+//  3. Time-based trigger (time since last datagram2 >= RepliableTimeInterval)
 //
 // The time-based trigger ensures hash mappings don't expire on low-traffic connections.
 func (s *SenderState) shouldUseDatagram2() bool {
