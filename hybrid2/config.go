@@ -28,4 +28,11 @@ var (
 	// DefaultErrorBufferSize is the buffer size for the error channel.
 	// This allows error reporting without blocking the receive goroutines.
 	DefaultErrorBufferSize = 10
-)
+    
+	// AckTimeout is how long to wait for an ACK before considering it lost.
+    AckTimeout = 10 * time.Second
+
+    // MaxUnackedDatagrams is the maximum number of unacknowledged datagram2 messages
+    // before considering the path degraded.
+    MaxUnackedDatagrams = 3
+}
