@@ -228,9 +228,26 @@ func (h *HybridSession) datagram2ReceiveLoop() {
 			// Update the sender mapping (this is the authenticated identity)
 			h.receiverState.RegisterSender(hash, dg.Source)
 
+			// Check if this is an ACK-related message
+			isAckReq, isAckResp, seqNum, data := decodeAckMessage(dg.Data)
+
+			if isAckResp {
+				// This is an ACK response - process it
+				state := h.getSenderState(dg.Source)
+				state.processAck(seqNum)
+				// Don't forward ACK responses to application
+				continue
+			}
+
+			if isAckReq {
+				// This is an ACK request - send response immediately
+				go h.sendAckResponse(seqNum, dg.Source)
+				// Forward the original data (without ACK marker) to application
+			}
+
 			// Forward to unified receive channel
 			hybrid := &HybridDatagram{
-				Data:         dg.Data,
+				Data:         data, // Use decoded data (ACK marker removed if present)
 				Source:       dg.Source,
 				SourceHash:   hash,
 				WasDatagram2: true,

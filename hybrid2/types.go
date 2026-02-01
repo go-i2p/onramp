@@ -27,8 +27,8 @@ var ErrTimeout = errors.New("hybrid2: operation timed out")
 // to a full destination address using mappings established by datagram2.
 type SenderHash [32]byte
 
-// SenderState tracks the send counter for a specific destination.
-// The counter determines when to use datagram2 (authenticated) vs datagram3 (low-overhead).
+// SenderState tracks the send counter and ACK state for a specific destination.
+// The counter and time determine when to use datagram2 (authenticated) vs datagram3 (low-overhead).
 type SenderState struct {
 	// Destination is the I2P address this state tracks.
 	Destination i2pkeys.I2PAddr
@@ -39,6 +39,36 @@ type SenderState struct {
 
 	// LastSendTime records when the last datagram was sent to this destination.
 	LastSendTime time.Time
+
+	// LastDatagram2Time tracks when the last datagram2 was sent to this destination.
+	// Used for time-based triggering to prevent hash mapping expiry on idle connections.
+	// Zero value forces immediate datagram2 on first send.
+	LastDatagram2Time time.Time
+
+	// LastDatagram2SeqNum is the sequence number counter for datagram2 messages.
+	// Separate from general message counter. Incremented only on datagram2 sends.
+	// Used for ACK matching and RTT calculation.
+	LastDatagram2SeqNum uint64
+
+	// LastAckedSeqNum is the highest datagram2 sequence number acknowledged by peer.
+	// Updated when processing ACK responses. Used for flow control decisions.
+	LastAckedSeqNum uint64
+
+	// UnackedDatagrams maps datagram2 sequence numbers to send timestamps.
+	// Populated when ACK is requested. Cleared when ACK received or timeout expires.
+	// Used for RTT calculation and lost packet detection.
+	UnackedDatagrams map[uint64]time.Time
+
+	// RTT is the round-trip time in milliseconds.
+	// Zero if not yet measured. Calculated via exponential moving average: RTT = (7×RTT + sample)/8.
+	// Used for adaptive timeouts and monitoring.
+	RTT uint64
+
+	// PathQuality is a quality score from 0.0 (poor) to 1.0 (excellent).
+	// Updated via exponential moving average.
+	// Increases on successful ACKs (×0.9 + 0.1×1.0), decreases on lost ACKs (×0.9 + 0.1×0.0).
+	// Used for path monitoring and alerting.
+	PathQuality float64
 
 	mu sync.Mutex
 }
@@ -60,6 +90,41 @@ type ReceiverMapping struct {
 	LastRefresh time.Time
 
 	mu sync.RWMutex
+}
+
+// PathStats provides path quality metrics for a specific destination.
+// Used for monitoring and diagnosing network issues.
+type PathStats struct {
+	// Destination is the I2P address being monitored.
+	Destination i2pkeys.I2PAddr
+
+	// RTT is the current round-trip time in milliseconds.
+	// Zero indicates no measurement available yet.
+	RTT uint64
+
+	// PathQuality is a score from 0.0 (poor) to 1.0 (excellent).
+	// Interpretation:
+	//   1.0       - Excellent (all ACKs received promptly)
+	//   0.9-0.99  - Good (occasional missed ACK)
+	//   0.7-0.89  - Fair (some packet loss)
+	//   0.5-0.69  - Poor (significant loss, investigate)
+	//   <0.5      - Critical (path likely broken)
+	PathQuality float64
+
+	// UnackedCount is the number of pending ACKs.
+	UnackedCount int
+
+	// LastDatagram2 is when the last datagram2 was sent.
+	LastDatagram2 time.Time
+
+	// LastAcked is when the last ACK was received.
+	LastAcked time.Time
+
+	// TotalSent is the total number of datagram2 messages sent.
+	TotalSent uint64
+
+	// TotalAcked is the total number of ACKs received.
+	TotalAcked uint64
 }
 
 // HybridDatagram represents a received datagram with resolved source information.
@@ -130,6 +195,10 @@ type HybridSession struct {
 
 	// Cleanup control
 	cleanupDone chan struct{}
+
+	// ACK cleanup goroutine control
+	ackCleanupTicker *time.Ticker
+	ackCleanupStop   chan struct{}
 }
 
 // HybridPacketConn implements net.PacketConn using hybrid2 logic.
