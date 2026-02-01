@@ -18,6 +18,7 @@ import (
 	"github.com/go-i2p/go-sam-go/primary"
 	"github.com/go-i2p/i2pkeys"
 	"github.com/go-i2p/logger"
+	"github.com/go-i2p/onramp/hybrid1"
 	"github.com/go-i2p/onramp/hybrid2"
 )
 
@@ -33,6 +34,7 @@ type Garlic struct {
 	primary    *primary.PrimarySession   // Master session managing shared tunnels
 	streamSub  *primary.StreamSubSession // Stream subsession for TCP-like connections
 	hybrid2Sub *hybrid2.HybridSession    // Hybrid2 session for efficient datagram messaging
+	hybrid1Sub *hybrid1.Hybrid1Session   // Hybrid1 session for i2pd-compatible datagrams
 
 	// Common fields
 	ServiceKeys *i2pkeys.I2PKeys
@@ -44,6 +46,24 @@ type Garlic struct {
 	TorrentMode bool
 }
 
+// Hybrid mode constants for selecting datagram protocol version.
+const (
+	// HYBRID_MODE_V1 selects i2pd-compatible datagram protocol.
+	// Use this mode for interoperability with i2pd-based applications.
+	HYBRID_MODE_V1 = hybrid1.HYBRID_MODE_V1
+
+	// HYBRID_MODE_V2 selects Go-native SAM datagram protocol (default).
+	// This is the recommended mode for Go-to-Go communication.
+	HYBRID_MODE_V2 = hybrid1.HYBRID_MODE_V2
+)
+
+// I2P datagram constants.
+const (
+	// I2P_UDP_MAX_MTU is the maximum MTU for I2P UDP datagrams (64KB).
+	I2P_UDP_MAX_MTU = hybrid1.I2P_UDP_MAX_MTU
+)
+
+// Address mode constants.
 const (
 	DEST_BASE32           = 0
 	DEST_HASH             = 1
@@ -59,6 +79,9 @@ func (g *Garlic) Network() string {
 	}
 	if g.hybrid2Sub != nil {
 		return "i2p-hybrid2"
+	}
+	if g.hybrid1Sub != nil {
+		return "i2p-hybrid1"
 	}
 	return "i2p-datagram"
 }
@@ -255,6 +278,42 @@ func (g *Garlic) setupHybrid2Session() (*hybrid2.HybridSession, error) {
 	return g.hybrid2Sub, nil
 }
 
+// getHybrid1ID returns a unique ID for the hybrid1 session.
+func (g *Garlic) getHybrid1ID() string {
+	return g.getName() + "-hybrid1"
+}
+
+// setupHybrid1Session creates or returns the hybrid1 session.
+// This method creates a hybrid1 session attached to the PRIMARY session,
+// enabling i2pd-compatible datagram messaging.
+//
+// Hybrid1 is designed for interoperability with i2pd-based applications.
+// It wraps SAM3 datagram operations with i2pd-style protocol framing.
+//
+// Returns the hybrid1 session or an error if creation fails.
+func (g *Garlic) setupHybrid1Session() (*hybrid1.Hybrid1Session, error) {
+	if g.hybrid1Sub == nil {
+		log.WithField("name", g.getName()).Debug("Setting up hybrid1 session")
+
+		// Ensure PRIMARY session exists first
+		if _, err := g.setupPrimarySession(); err != nil {
+			return nil, err
+		}
+
+		// Create hybrid1 session with options
+		var err error
+		subOpts := append(g.getOptions(), "PORT=0")
+		g.hybrid1Sub, err = hybrid1.NewHybrid1Session(g.primary, g.getHybrid1ID(), hybrid1.WithOptions(subOpts))
+		if err != nil {
+			log.WithError(err).Error("Failed to create hybrid1 session")
+			return nil, fmt.Errorf("onramp setupHybrid1Session: %v", err)
+		}
+
+		log.Debug("Hybrid1 session created successfully")
+	}
+	return g.hybrid1Sub, nil
+}
+
 // NewListener returns a net.Listener for the Garlic structure's I2P keys.
 // accepts a variable list of arguments, arguments after the first one are ignored.
 func (g *Garlic) NewListener(n, addr string) (net.Listener, error) {
@@ -377,6 +436,81 @@ func (g *Garlic) ListenPacket() (net.PacketConn, error) {
 	log.Debug("Packet connection successfully established")
 	// Return hybrid2 PacketConn which multiplexes datagram2/datagram3
 	return g.hybrid2Sub.PacketConn(), nil
+}
+
+// ListenPacketWithMode returns a net.PacketConn using the specified hybrid mode.
+// This allows explicit selection between Hybrid1 (i2pd-compatible) and
+// Hybrid2 (Go-native, default) datagram protocols.
+//
+// Mode options:
+//   - HYBRID_MODE_V1: i2pd-compatible datagram protocol for interoperability
+//   - HYBRID_MODE_V2: Go-native SAM datagram protocol (default, recommended)
+//
+// Example usage:
+//
+//	// Hybrid1 for i2pd compatibility
+//	conn, err := garlic.ListenPacketWithMode(HYBRID_MODE_V1)
+//
+//	// Hybrid2 for optimal Go-to-Go communication
+//	conn, err := garlic.ListenPacketWithMode(HYBRID_MODE_V2)
+func (g *Garlic) ListenPacketWithMode(mode int) (net.PacketConn, error) {
+	log.WithField("mode", mode).Debug("Setting up packet connection with mode")
+
+	switch mode {
+	case HYBRID_MODE_V1:
+		return g.ListenPacketHybrid1()
+	case HYBRID_MODE_V2:
+		return g.ListenPacketHybrid2()
+	default:
+		log.WithField("mode", mode).Warn("Unknown hybrid mode, defaulting to Hybrid2")
+		return g.ListenPacketHybrid2()
+	}
+}
+
+// ListenPacketHybrid1 returns a net.PacketConn using the Hybrid1 protocol.
+// Hybrid1 provides i2pd-compatible datagram framing for interoperability
+// with i2pd-based applications.
+//
+// Use this method when:
+//   - Communicating with i2pd-based applications
+//   - Interoperability with non-Go I2P implementations is required
+//   - Matching i2pd's datagram frame structure is necessary
+//
+// For Go-to-Go communication, prefer ListenPacket() or ListenPacketHybrid2()
+// which use the more efficient Hybrid2 protocol.
+func (g *Garlic) ListenPacketHybrid1() (net.PacketConn, error) {
+	log.Debug("Setting up Hybrid1 packet connection (i2pd-compatible)")
+	var err error
+
+	// Initialize SAM connection
+	if g.SAM, err = g.samSession(); err != nil {
+		log.WithError(err).Error("Failed to create SAM session for Hybrid1 connection")
+		return nil, fmt.Errorf("onramp ListenPacketHybrid1: %v", err)
+	}
+
+	// Setup hybrid1 session (which ensures PRIMARY session exists)
+	if g.hybrid1Sub, err = g.setupHybrid1Session(); err != nil {
+		log.WithError(err).Error("Failed to setup hybrid1 session")
+		return nil, fmt.Errorf("onramp ListenPacketHybrid1: %v", err)
+	}
+
+	log.Debug("Hybrid1 packet connection successfully established")
+	return g.hybrid1Sub.PacketConn(), nil
+}
+
+// ListenPacketHybrid2 returns a net.PacketConn using the Hybrid2 protocol.
+// This is an explicit alias for ListenPacket() and returns the default
+// Hybrid2 PacketConn.
+//
+// Hybrid2 is recommended for Go-to-Go communication and provides:
+//   - Optimal performance with native SAM3 datagrams
+//   - 1:99 ratio of authenticated to low-overhead messages
+//   - Efficient hash-to-destination mapping
+//
+// This method is equivalent to calling ListenPacket().
+func (g *Garlic) ListenPacketHybrid2() (net.PacketConn, error) {
+	log.Debug("Setting up Hybrid2 packet connection (Go-native)")
+	return g.ListenPacket()
 }
 
 // ListenTLS returns a net.Listener for the Garlic structure's I2P keys,
@@ -533,6 +667,16 @@ func (g *Garlic) Close() error {
 		}
 	}
 
+	// Close hybrid1 session (closes its subsessions)
+	if g.hybrid1Sub != nil {
+		if err := g.hybrid1Sub.Close(); err != nil {
+			log.WithError(err).Error("Failed to close hybrid1 session")
+			errors = append(errors, fmt.Errorf("hybrid1 session: %v", err))
+		} else {
+			log.Debug("Hybrid1 session closed successfully")
+		}
+	}
+
 	// Close PRIMARY session (automatically closes all subsessions)
 	if g.primary != nil {
 		if err := g.primary.Close(); err != nil {
@@ -557,6 +701,7 @@ func (g *Garlic) Close() error {
 	g.primary = nil
 	g.streamSub = nil
 	g.hybrid2Sub = nil
+	g.hybrid1Sub = nil
 
 	if len(errors) > 0 {
 		return fmt.Errorf("onramp Close: %v", errors)
