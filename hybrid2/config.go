@@ -2,7 +2,7 @@ package hybrid2
 
 import "time"
 
-const (
+var (
 	// RepliableInterval defines how often to send a datagram2 for identity refresh.
 	// Pattern: 1 datagram2 (at index 0), then 499 datagram3, then 1 datagram2 (at index 500), repeat.
 	// This means every 500th message is authenticated via datagram2.
