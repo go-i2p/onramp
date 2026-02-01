@@ -4,8 +4,8 @@ import "time"
 
 const (
 	// RepliableInterval defines how often to send a datagram2 for identity refresh.
-	// Pattern: 1 datagram2 (at index 0), then 99 datagram3, then 1 datagram2 (at index 100), repeat.
-	// This means every 100th message is authenticated via datagram2.
+	// Pattern: 1 datagram2 (at index 0), then 499 datagram3, then 1 datagram2 (at index 500), repeat.
+	// This means every 500th message is authenticated via datagram2.
 	RepliableInterval = 500
 
 	// FirstMessageIndex is the counter value for the first datagram2 (identity establishment).
