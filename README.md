@@ -143,6 +143,69 @@ The hybrid2 protocol automatically:
 - Maintains sender hash mappings for efficient message routing
 - Provides deadline support via `SetReadDeadline()` and `SetWriteDeadline()`
 
+### Hybrid1 Datagram Protocol (i2pd-Compatible):
+
+The `hybrid1` sub-package provides i2pd-compatible datagram protocol support.
+Use this mode when interoperating with i2pd-based applications.
+
+```Go
+package main
+
+import (
+	"log"
+	"time"
+
+	"github.com/go-i2p/onramp"
+)
+
+func main() {
+	// Create a Garlic instance
+	garlic, err := onramp.NewGarlic("my-hybrid1-app", onramp.SAM_ADDR, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer garlic.Close()
+
+	// Option 1: Explicit Hybrid1 method (i2pd-compatible)
+	conn, err := garlic.ListenPacketHybrid1()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Option 2: Using mode constant
+	// conn, err := garlic.ListenPacketWithMode(onramp.HYBRID_MODE_V1)
+
+	// Set read deadline for timeout support
+	conn.SetReadDeadline(time.Now().Add(30 * time.Second))
+
+	// Use like any other PacketConn
+	buf := make([]byte, 64*1024) // i2pd max MTU
+	n, addr, err := conn.ReadFrom(buf)
+	if err != nil {
+		log.Printf("Read error: %v", err)
+		return
+	}
+	log.Printf("Received %d bytes from %s", n, addr)
+}
+```
+
+**Hybrid Mode Selection:**
+
+| Mode | Constant | Method | Use Case |
+|------|----------|--------|----------|
+| Hybrid2 (Default) | `HYBRID_MODE_V2` | `ListenPacket()` or `ListenPacketHybrid2()` | Go-to-Go communication, optimal performance |
+| Hybrid1 (i2pd) | `HYBRID_MODE_V1` | `ListenPacketHybrid1()` | i2pd interoperability |
+
+**When to use Hybrid1:**
+- Communicating with i2pd-based applications
+- Interoperability with non-Go I2P implementations
+- Matching i2pd's datagram frame structure is required
+
+**When to use Hybrid2 (Recommended):**
+- Go-to-Go communication
+- Most flexibility
+- Native SAM3 datagram support
+
 ## Verbosity ##
 
 Logging is provided by the `github.com/go-i2p/logger` package, which offers structured logging with advanced debugging features.

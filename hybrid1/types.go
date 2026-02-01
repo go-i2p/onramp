@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-i2p/go-sam-go/datagram"
 	"github.com/go-i2p/go-sam-go/primary"
 	"github.com/go-i2p/i2pkeys"
 )
@@ -98,9 +97,6 @@ type Hybrid1Session struct {
 
 	// Datagram subsession for actual communication.
 	datagramSub *primary.DatagramSubSession
-
-	// Datagram reader for receiving.
-	datagramReader *datagram.DatagramReader
 
 	// Sender states per destination.
 	senderStates map[string]*SenderState

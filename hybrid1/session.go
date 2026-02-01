@@ -69,9 +69,6 @@ func NewHybrid1Session(primarySession *primary.PrimarySession, id string, opts .
 	// Set local address from primary session.
 	session.localAddr = primarySession.Addr()
 
-	// Create datagram reader.
-	session.datagramReader = session.datagramSub.NewDatagramReader()
-
 	// Start background receive loop.
 	go session.receiveLoop()
 
@@ -106,8 +103,8 @@ func (h *Hybrid1Session) receiveLoop() {
 		case <-h.recvStopChan:
 			return
 		default:
-			// Read from datagram session.
-			dg, err := h.datagramReader.ReceiveDatagram()
+			// Read directly from datagram subsession.
+			dg, err := h.datagramSub.ReceiveDatagram()
 			if err != nil {
 				// Check if session is closed.
 				h.closeMu.RLock()
@@ -232,11 +229,6 @@ func (h *Hybrid1Session) Close() error {
 
 	// Stop receive loop.
 	close(h.recvStopChan)
-
-	// Close datagram reader.
-	if h.datagramReader != nil {
-		h.datagramReader.Close()
-	}
 
 	// Close datagram subsession.
 	if h.datagramSub != nil {
