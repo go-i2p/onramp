@@ -138,8 +138,9 @@ func main() {
 ```
 
 The hybrid2 protocol automatically:
-- Sends authenticated datagram2 messages every 100th send
+- Sends authenticated datagram2 messages every 500th send (1:499 ratio)
 - Sends low-overhead datagram3 messages for all other sends
+- Uses time-based refresh to prevent hash mapping expiry on idle connections
 - Maintains sender hash mappings for efficient message routing
 - Provides deadline support via `SetReadDeadline()` and `SetWriteDeadline()`
 

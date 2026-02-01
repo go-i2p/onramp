@@ -898,6 +898,17 @@ var (
 // CloseAllGarlic closes all garlics managed by the onramp package. It does not
 // affect objects instantiated by an app.
 func CloseAllGarlic() {
+	// Close the shared default dialer first
+	defaultDialerMu.Lock()
+	if defaultDialer != nil {
+		log.Debug("Closing shared default dialer")
+		if err := defaultDialer.Close(); err != nil {
+			log.WithError(err).Error("Error closing default dialer")
+		}
+		defaultDialer = nil
+	}
+	defaultDialerMu.Unlock()
+
 	garlicsMu.Lock()
 	defer garlicsMu.Unlock()
 	log.WithField("count", len(garlics)).Debug("Closing all Garlic connections")
@@ -975,9 +986,20 @@ func ListenGarlic(network, keys string) (net.Listener, error) {
 	return g.Listen()
 }
 
+// defaultDialer is the shared Garlic instance used for package-level DialGarlic calls.
+// It is lazily initialized on first use and provides a consistent I2P identity
+// for all outbound connections made via DialGarlic().
+var (
+	defaultDialer   *Garlic
+	defaultDialerMu sync.Mutex
+)
+
 // DialGarlic returns a net.Conn for a garlic structure's keys
 // corresponding to a structure managed by the onramp library
 // and not instantiated by an app.
+//
+// All outbound connections share a single Garlic instance (and I2P identity)
+// to minimize resource usage and provide consistent client identity.
 func DialGarlic(network, addr string) (net.Conn, error) {
 	log.WithFields(logger.Fields{
 		"network":  network,
@@ -985,28 +1007,21 @@ func DialGarlic(network, addr string) (net.Conn, error) {
 		"sam_addr": SAM_ADDR,
 	}).Debug("Creating new Garlic connection")
 
-	// Check if we already have a Garlic instance for this address
-	garlicsMu.RLock()
-	existing, exists := garlics[addr]
-	garlicsMu.RUnlock()
-
-	var g *Garlic
-	var err error
-
-	if exists {
-		log.WithField("address", addr).Debug("Reusing existing Garlic instance")
-		g = existing
-	} else {
-		// Create new Garlic instance
-		g, err = NewGarlic(addr, SAM_ADDR, OPT_DEFAULTS)
+	// Use a shared dialer instance for all outbound connections
+	// This ensures consistent client identity and reduces resource usage
+	defaultDialerMu.Lock()
+	if defaultDialer == nil {
+		var err error
+		defaultDialer, err = NewGarlic("onramp-dialer", SAM_ADDR, OPT_DEFAULTS)
 		if err != nil {
-			log.WithError(err).Error("Failed to create new Garlic")
+			defaultDialerMu.Unlock()
+			log.WithError(err).Error("Failed to create shared dialer Garlic")
 			return nil, fmt.Errorf("onramp Dial: %v", err)
 		}
-		garlicsMu.Lock()
-		garlics[addr] = g
-		garlicsMu.Unlock()
+		log.Debug("Created new shared dialer Garlic instance")
 	}
+	g := defaultDialer
+	defaultDialerMu.Unlock()
 
 	log.WithField("address", addr).Debug("Attempting to dial")
 	conn, err := g.Dial(network, addr)

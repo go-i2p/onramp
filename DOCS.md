@@ -34,6 +34,14 @@ var SAM_ADDR = "127.0.0.1:7656"
 
 ## Functions
 
+### func [CloseAll](/common.go#L246)
+
+`func CloseAll()`
+
+CloseAll closes all Garlic and Onion instances managed by the onramp package.
+It does not affect objects instantiated directly by an application.
+This is a convenience function that calls CloseAllGarlic() and CloseAllOnion().
+
 ### func [CloseAllGarlic](/garlic.go#L211)
 
 `func CloseAllGarlic()`

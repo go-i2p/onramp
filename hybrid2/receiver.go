@@ -240,8 +240,17 @@ func (h *HybridSession) datagram2ReceiveLoop() {
 			}
 
 			if isAckReq {
-				// This is an ACK request - send response immediately
-				go h.sendAckResponse(seqNum, dg.Source)
+				// This is an ACK request - send response synchronously
+				// Sending is fast (just a datagram write) and avoids goroutine overhead
+				// at high message rates. Errors are logged but don't block message processing.
+				if err := h.sendAckResponse(seqNum, dg.Source); err != nil {
+					// Log error but continue processing - ACK loss is handled by timeout
+					select {
+					case h.recvErrChan <- fmt.Errorf("ACK response send: %w", err):
+					default:
+						// Error channel full, skip
+					}
+				}
 				// Forward the original data (without ACK marker) to application
 			}
 

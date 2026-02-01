@@ -1,6 +1,7 @@
 package onramp
 
 import (
+	"io"
 	"net"
 	"time"
 )
@@ -10,7 +11,7 @@ type NullConn struct {
 }
 
 func (nc *NullConn) Read(b []byte) (n int, err error) {
-	return 0, nil
+	return 0, io.EOF
 }
 
 func (nc *NullConn) Write(b []byte) (n int, err error) {
