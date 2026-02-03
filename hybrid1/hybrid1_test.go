@@ -3,6 +3,8 @@ package hybrid1
 import (
 	"testing"
 	"time"
+
+	"github.com/go-i2p/i2pkeys"
 )
 
 // TestConstants verifies that constants are correctly defined.
@@ -87,7 +89,7 @@ func TestReceiverMapping(t *testing.T) {
 // TestComputeSenderHash tests hash computation.
 func TestComputeSenderHash(t *testing.T) {
 	addr := "test.b32.i2p"
-	hash := computeSenderHash(addr)
+	hash := computeSenderHash(i2pkeys.I2PAddr(addr))
 
 	// Hash should not be all zeros
 	allZero := true
@@ -102,7 +104,7 @@ func TestComputeSenderHash(t *testing.T) {
 	}
 
 	// Same address should produce same hash
-	hash2 := computeSenderHash(addr)
+	hash2 := computeSenderHash(i2pkeys.I2PAddr(addr))
 	if hash != hash2 {
 		t.Error("Same address should produce same hash")
 	}
