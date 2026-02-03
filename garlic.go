@@ -518,8 +518,14 @@ func (g *Garlic) DialContext(ctx context.Context, net, addr string) (net.Conn, e
 // When using PRIMARY sessions, closing the PRIMARY session automatically
 // closes all subsessions. Legacy session cleanup is maintained for backward
 // compatibility.
+//
+// Close also unregisters this instance from the automatic cleanup registry
+// if it was registered via EnableAutoCleanup.
 func (g *Garlic) Close() error {
 	log.WithField("name", g.getName()).Debug("Closing Garlic sessions")
+
+	// Unregister from automatic cleanup registry and clear finalizer
+	registry.unregister(g)
 
 	var errors []error
 
@@ -628,6 +634,10 @@ func (g *Garlic) Primary() (*primary.PrimarySession, error) {
 //
 // PRIMARY session creation takes 2-5 minutes for I2P tunnel establishment.
 // Subsequent subsession creation is nearly instant once PRIMARY tunnels exist.
+//
+// Automatic cleanup is enabled by default to ensure SAM sessions are properly
+// closed even if Close() is not called (e.g., on program crash or signal termination).
+// The cleanup is triggered by SIGINT, SIGTERM, SIGHUP signals and runtime finalizers.
 func NewGarlic(tunName, samAddr string, options []string) (*Garlic, error) {
 	log.WithFields(logger.Fields{
 		"tunnel_name": tunName,
@@ -655,6 +665,9 @@ func NewGarlic(tunName, samAddr string, options []string) (*Garlic, error) {
 	}
 	// PRIMARY sessions are created lazily on first use (e.g., ListenStream, Dial, ListenPacket)
 	// to maintain fast initialization. Session setup takes 2-5 minutes for I2P tunnel establishment.
+
+	// Enable automatic cleanup to guarantee SAM session cleanup even if Close() is not called
+	EnableAutoCleanup(g)
 
 	log.Debug("Successfully created new Garlic instance")
 	return g, nil
@@ -751,8 +764,12 @@ var (
 )
 
 // CloseAllGarlic closes all garlics managed by the onramp package. It does not
-// affect objects instantiated by an app.
+// affect objects instantiated by an app directly (use EnableAutoCleanup for those).
+// This function also runs any registered cleanup hooks.
 func CloseAllGarlic() {
+	// Run cleanup hooks first
+	runCleanupHooks()
+
 	garlicsMu.Lock()
 	defer garlicsMu.Unlock()
 	log.WithField("count", len(garlics)).Debug("Closing all Garlic connections")

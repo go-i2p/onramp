@@ -67,6 +67,19 @@ to operate without requiring an external I2P router in some scenarios.
 - If port 7656 is available, an embedded bridge is created and used automatically
 - The embedded bridge is managed by the `Garlic.Bridge` field
 
+#### Automatic Session Cleanup
+
+All Garlic instances created via `NewGarlic()` automatically register for cleanup
+to prevent orphaned SAM sessions when your program exits unexpectedly (e.g., crashes,
+signals, or failing to call `Close()`). This is enabled by default.
+
+**Cleanup mechanisms:**
+- Signal handlers catch SIGINT, SIGTERM, and SIGHUP to clean up sessions before exit
+- Runtime finalizers provide best-effort cleanup during garbage collection
+- Custom cleanup hooks can be registered via `RegisterCleanupHook(func())`
+
+If you need to disable automatic cleanup for a specific instance, use `DisableAutoCleanup(garlic)`.
+
 ### Tor(Onion) Usage:
 
 When using it to manage a Tor session, set up an `onramp.Onion`
