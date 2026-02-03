@@ -248,11 +248,11 @@ func (g *Garlic) setupStreamSubSession() (*primary.StreamSubSession, error) {
 
 // setupHybrid2Session creates or returns the hybrid2 session.
 // This method creates a hybrid2 session attached to the PRIMARY session,
-// enabling efficient datagram messaging using the 1:99 hybrid protocol.
+// enabling efficient datagram messaging using the 1:499 hybrid protocol.
 //
-// The hybrid2 protocol sends authenticated datagram2 messages every 100th
+// The hybrid2 protocol sends authenticated datagram2 messages every 500th
 // message (for hash-to-address mapping) and uses low-overhead datagram3
-// for the remaining 99 messages.
+// for the remaining 499 messages.
 //
 // Returns the hybrid2 session or an error if creation fails.
 func (g *Garlic) setupHybrid2Session() (*hybrid2.HybridSession, error) {
@@ -414,7 +414,7 @@ func (g *Garlic) ListenStream() (net.Listener, error) {
 
 // ListenPacket returns a net.PacketConn for the Garlic structure's I2P keys.
 // This method now uses the hybrid2 protocol for efficient datagram messaging.
-// The hybrid2 session uses a 1:99 ratio of authenticated datagram2 messages
+// The hybrid2 session uses a 1:499 ratio of authenticated datagram2 messages
 // to low-overhead datagram3 messages, optimizing bandwidth while maintaining
 // address resolution capabilities.
 func (g *Garlic) ListenPacket() (net.PacketConn, error) {
@@ -504,7 +504,7 @@ func (g *Garlic) ListenPacketHybrid1() (net.PacketConn, error) {
 //
 // Hybrid2 is recommended for Go-to-Go communication and provides:
 //   - Optimal performance with native SAM3 datagrams
-//   - 1:99 ratio of authenticated to low-overhead messages
+//   - 1:499 ratio of authenticated to low-overhead messages
 //   - Efficient hash-to-destination mapping
 //
 // This method is equivalent to calling ListenPacket().

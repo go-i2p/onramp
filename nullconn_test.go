@@ -412,11 +412,13 @@ func TestNullConn_OperationSequence(t *testing.T) {
 	}
 
 	// Perform I/O operations
+	// NullConn.Read() always returns io.EOF by design (it's a null/discard connection)
 	buffer := make([]byte, 100)
-	if _, err := nc.Read(buffer); err != nil {
-		t.Errorf("Read() error = %v", err)
+	if _, err := nc.Read(buffer); err != io.EOF {
+		t.Errorf("Read() expected io.EOF, got = %v", err)
 	}
 
+	// Write always succeeds (data is discarded)
 	data := []byte("test data")
 	if _, err := nc.Write(data); err != nil {
 		t.Errorf("Write() error = %v", err)

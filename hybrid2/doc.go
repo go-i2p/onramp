@@ -2,7 +2,7 @@
 // (authenticated, repliable, with replay protection) and Datagram3 (repliable,
 // low-overhead, hash-based) protocols.
 //
-// The hybrid approach uses datagram2 periodically (1 in 100 messages) to
+// The hybrid approach uses datagram2 periodically (1 in 500 messages) to
 // establish and refresh sender identity, then datagram3 for the remaining
 // messages to reduce overhead while maintaining sender identification.
 //
@@ -19,8 +19,8 @@
 // # Usage Pattern
 //
 // Sender side:
-//  1. First message (and every 100th message) uses datagram2 for authentication
-//  2. Remaining 99 messages use datagram3 for lower overhead
+//  1. First message (and every 500th message) uses datagram2 for authentication
+//  2. Remaining 499 messages use datagram3 for lower overhead
 //
 // Receiver side:
 //  1. Datagram2 messages update the hash-to-destination mapping
@@ -31,7 +31,7 @@
 // While datagram3 sources are technically unauthenticated, the hybrid approach
 // provides sender identification through periodic datagram2 authentication.
 // The security model relies on:
-//   - Periodic identity refresh via datagram2 (every 100 messages)
+//   - Periodic identity refresh via datagram2 (every 500 messages)
 //   - Hash expiry (10 minutes) to prevent stale mappings
 //   - Application-level verification when stronger guarantees are needed
 //

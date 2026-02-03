@@ -10,13 +10,18 @@ import (
 )
 
 // computeSenderHash computes a 32-byte SHA-256 hash from an I2P destination address.
+// If ToBytes() fails (e.g., for invalid addresses), it falls back to hashing
+// the string representation to ensure a non-zero hash is always returned.
 func computeSenderHash(addr i2pkeys.I2PAddr) SenderHash {
 	var hash SenderHash
 	h := sha256.New()
 	if bytes, err := addr.ToBytes(); err == nil {
 		h.Write(bytes)
-		copy(hash[:], h.Sum(nil))
+	} else {
+		// Fallback: hash the string representation for invalid addresses
+		h.Write([]byte(string(addr)))
 	}
+	copy(hash[:], h.Sum(nil))
 	return hash
 }
 

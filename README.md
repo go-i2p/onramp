@@ -109,7 +109,7 @@ func main() {
 ### Hybrid2 Datagram Protocol (Advanced):
 
 The `hybrid2` sub-package provides an efficient datagram protocol for I2P
-that balances authentication overhead with throughput. It uses a 1:99 ratio
+that balances authentication overhead with throughput. It uses a 1:499 ratio
 of authenticated (datagram2) to low-overhead (datagram3) messages.
 
 ```Go

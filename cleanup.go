@@ -71,9 +71,12 @@ func (r *cleanupRegistry) unregister(g *Garlic) {
 	log.WithField("name", g.getName()).Debug("Unregistered Garlic instance from cleanup")
 }
 
-// cleanupAll closes all registered Garlic instances.
+// cleanupAll closes all registered Garlic instances and runs cleanup hooks.
 // This is called when a termination signal is received.
 func (r *cleanupRegistry) cleanupAll() {
+	// Run cleanup hooks first
+	runCleanupHooks()
+
 	r.mu.Lock()
 	instances := make([]*Garlic, 0, len(r.instances))
 	for g := range r.instances {

@@ -36,6 +36,7 @@ func TestComputeSenderHash(t *testing.T) {
 }
 
 // TestSenderState tests the sender state counter logic.
+// RepliableInterval is 500, so datagram2 is used at counter 0, 500, 1000, etc.
 func TestSenderState(t *testing.T) {
 	state := &SenderState{
 		Destination:      i2pkeys.I2PAddr("test"),
@@ -48,20 +49,31 @@ func TestSenderState(t *testing.T) {
 		t.Error("Counter 0 should use datagram2")
 	}
 
-	// Increment through messages
-	for i := uint64(0); i < 499; i++ {
-		state.incrementCounter()
+	// Increment to counter 1 and verify datagram3 is used
+	state.incrementCounter()
+	if state.shouldUseDatagram2() {
+		t.Error("Counter 1 should not use datagram2")
 	}
 
-	// Counter 499 should not use datagram2
+	// Increment to counter 499 (still not at interval)
+	for i := uint64(1); i < 499; i++ {
+		state.incrementCounter()
+	}
+	// Counter is now 499, should not use datagram2
 	if state.shouldUseDatagram2() {
 		t.Error("Counter 499 should not use datagram2")
 	}
 
-	// Counter 500 should use datagram2
+	// Counter 500 should use datagram2 (500 % 500 == 0)
 	state.incrementCounter()
 	if !state.shouldUseDatagram2() {
 		t.Error("Counter 500 should use datagram2")
+	}
+
+	// Counter 501 should not use datagram2
+	state.incrementCounter()
+	if state.shouldUseDatagram2() {
+		t.Error("Counter 501 should not use datagram2")
 	}
 }
 
@@ -206,9 +218,11 @@ func TestHybridDatagram(t *testing.T) {
 }
 
 // TestConstants verifies the protocol constants are set correctly.
+// Note: RepliableInterval was changed from 100 to 500 for better efficiency.
+// This test validates the current configuration values.
 func TestConstants(t *testing.T) {
-	if RepliableInterval != 100 {
-		t.Errorf("RepliableInterval should be 100, got %d", RepliableInterval)
+	if RepliableInterval != 500 {
+		t.Errorf("RepliableInterval should be 500, got %d", RepliableInterval)
 	}
 	if FirstMessageIndex != 0 {
 		t.Errorf("FirstMessageIndex should be 0, got %d", FirstMessageIndex)
