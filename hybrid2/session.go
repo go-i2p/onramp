@@ -45,11 +45,13 @@ func WithOptions(options []string) SessionOption {
 //	defer hybrid.Close()
 func NewHybridSession(primarySession *primary.PrimarySession, id string, opts ...SessionOption) (*HybridSession, error) {
 	session := &HybridSession{
-		primary:      primarySession,
-		id:           id,
-		senderStates: make(map[string]*SenderState),
-		receiverMap:  make(map[SenderHash]*ReceiverMapping),
-		cleanupDone:  make(chan struct{}),
+		primary:          primarySession,
+		id:               id,
+		senderStates:     make(map[string]*SenderState),
+		receiverMap:      make(map[SenderHash]*ReceiverMapping),
+		cleanupDone:      make(chan struct{}),
+		ackCleanupStop:   make(chan struct{}),
+		ackCleanupTicker: time.NewTicker(AckCleanupInterval),
 	}
 
 	// Apply options
@@ -86,6 +88,9 @@ func NewHybridSession(primarySession *primary.PrimarySession, id string, opts ..
 
 	// Start background receive loops
 	session.startReceiveLoops()
+
+	// Start ACK cleanup goroutine
+	go session.ackCleanupLoop()
 
 	return session, nil
 }
@@ -130,6 +135,35 @@ func (h *HybridSession) closeSubsessions() {
 	}
 }
 
+// ackCleanupLoop periodically scans all sender states and removes stale unacked messages.
+// This runs in a background goroutine for the lifetime of the session.
+func (h *HybridSession) ackCleanupLoop() {
+	for {
+		select {
+		case <-h.ackCleanupTicker.C:
+			h.cleanupStaleUnacked()
+		case <-h.ackCleanupStop:
+			h.ackCleanupTicker.Stop()
+			return
+		}
+	}
+}
+
+// cleanupStaleUnacked scans all sender states and cleans up stale unacked messages.
+func (h *HybridSession) cleanupStaleUnacked() {
+	h.senderMu.RLock()
+	states := make([]*SenderState, 0, len(h.senderStates))
+	for _, state := range h.senderStates {
+		states = append(states, state)
+	}
+	h.senderMu.RUnlock()
+
+	// Clean each state
+	for _, state := range states {
+		state.cleanupStaleUnacked()
+	}
+}
+
 // Close closes the hybrid session and all associated resources.
 // This method:
 //   - Stops receive loops
@@ -149,6 +183,9 @@ func (h *HybridSession) Close() error {
 
 	// Stop receive loops and cleanup
 	h.stopReceiveLoops()
+
+	// Stop ACK cleanup goroutine
+	close(h.ackCleanupStop)
 
 	// Close subsessions
 	h.closeSubsessions()
@@ -186,6 +223,67 @@ func (h *HybridSession) Datagram2Sub() *primary.DatagramSubSession {
 // Use with caution - direct access bypasses hybrid protocol logic.
 func (h *HybridSession) Datagram3Sub() *primary.Datagram3SubSession {
 	return h.datagram3Sub
+}
+
+// GetPathStats returns path quality statistics for a specific destination.
+// Returns nil if no state exists for the destination.
+func (h *HybridSession) GetPathStats(dest i2pkeys.I2PAddr) *PathStats {
+	key := dest.Base64()
+
+	h.senderMu.RLock()
+	state, exists := h.senderStates[key]
+	h.senderMu.RUnlock()
+
+	if !exists {
+		return nil
+	}
+
+	state.mu.Lock()
+	defer state.mu.Unlock()
+
+	// Find the timestamp of the last ACK
+	var lastAcked time.Time
+	for _, sendTime := range state.UnackedDatagrams {
+		// If we have unacked messages, last ACK was before the oldest unacked
+		if sendTime.Before(lastAcked) || lastAcked.IsZero() {
+			lastAcked = sendTime
+		}
+	}
+	// If all are acked, last ACK was recent
+	if len(state.UnackedDatagrams) == 0 && !state.LastDatagram2Time.IsZero() {
+		lastAcked = state.LastDatagram2Time
+	}
+
+	return &PathStats{
+		Destination:   dest,
+		RTT:           state.RTT,
+		PathQuality:   state.PathQuality,
+		UnackedCount:  len(state.UnackedDatagrams),
+		LastDatagram2: state.LastDatagram2Time,
+		LastAcked:     lastAcked,
+		TotalSent:     state.LastDatagram2SeqNum,
+		TotalAcked:    state.LastAckedSeqNum,
+	}
+}
+
+// GetAllPathStats returns path statistics for all known destinations.
+// Useful for monitoring overall mesh network quality.
+func (h *HybridSession) GetAllPathStats() []*PathStats {
+	h.senderMu.RLock()
+	states := make([]*SenderState, 0, len(h.senderStates))
+	for _, state := range h.senderStates {
+		states = append(states, state)
+	}
+	h.senderMu.RUnlock()
+
+	result := make([]*PathStats, 0, len(states))
+	for _, state := range states {
+		if stats := h.GetPathStats(state.Destination); stats != nil {
+			result = append(result, stats)
+		}
+	}
+
+	return result
 }
 
 // PacketConn returns a net.PacketConn interface for this session.

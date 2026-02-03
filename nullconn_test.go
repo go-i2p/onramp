@@ -4,12 +4,13 @@
 package onramp
 
 import (
+	"io"
 	"net"
 	"testing"
 	"time"
 )
 
-// TestNullConn_Read verifies that Read operation returns zero bytes and no error
+// TestNullConn_Read verifies that Read operation returns zero bytes and io.EOF
 func TestNullConn_Read(t *testing.T) {
 	nc := &NullConn{}
 
@@ -35,8 +36,8 @@ func TestNullConn_Read(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			buffer := make([]byte, tt.bufferSize)
 			n, err := nc.Read(buffer)
-			if err != nil {
-				t.Errorf("Read() error = %v, want nil", err)
+			if err != io.EOF {
+				t.Errorf("Read() error = %v, want io.EOF", err)
 			}
 
 			if n != 0 {
