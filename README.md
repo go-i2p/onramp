@@ -44,7 +44,10 @@ import (
 )
 
 func main() {
-	garlic := &onramp.Garlic{}
+	garlic, err := onramp.NewGarlic("my-app", onramp.SAM_ADDR, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
 	defer garlic.Close()
 	listener, err := garlic.Listen()
 	if err != nil {
@@ -96,7 +99,10 @@ import (
 )
 
 func main() {
-	onion := &onramp.Onion{}
+	onion, err := onramp.NewOnion("my-app")
+	if err != nil {
+		log.Fatal(err)
+	}
 	defer onion.Close()
 	listener, err := onion.Listen()
 	if err != nil {

@@ -16,7 +16,10 @@ import (
 )
 
 func main() {
-	garlic := &onramp.Garlic{}
+	garlic, err := onramp.NewGarlic("my-listener", onramp.SAM_ADDR, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
 	defer garlic.Close()
 	listener, err := garlic.Listen()
 	if err != nil {
@@ -48,7 +51,10 @@ import (
 )
 
 func main() {
-	garlic := &onramp.Garlic{}
+	garlic, err := onramp.NewGarlic("my-dialer", onramp.SAM_ADDR, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
 	defer garlic.Close()
 	transport := http.Transport{
 		Dial: garlic.Dial,
@@ -89,7 +95,10 @@ import (
 )
 
 func main() {
-	garlic := &onramp.Garlic{}
+	garlic, err := onramp.NewGarlic("my-bidirectional", onramp.SAM_ADDR, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
 	defer garlic.Close()
 	listener, err := garlic.Listen()
 	if err != nil {
