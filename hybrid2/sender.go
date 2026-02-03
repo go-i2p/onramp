@@ -64,7 +64,7 @@ func (s *SenderState) shouldUseDatagram2() bool {
 	defer s.mu.Unlock()
 
 	// Check counter-based trigger
-	if s.Counter%RepliableInterval == FirstMessageIndex {
+	if s.Counter%uint64(RepliableInterval) == uint64(FirstMessageIndex) {
 		return true
 	}
 
@@ -337,7 +337,7 @@ func (h *HybridSession) ForceDatagram2(data []byte, dest i2pkeys.I2PAddr) error 
 	state := h.getSenderState(dest)
 
 	// Mark datagram2 sent and get sequence number
-	seqNum := state.markDatagram2Sent()
+	state.markDatagram2Sent()
 
 	// Send authenticated datagram2 (without ACK request for forced sends)
 	if err := h.datagram2Sub.SendDatagram(data, dest); err != nil {
