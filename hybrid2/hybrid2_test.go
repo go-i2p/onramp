@@ -39,9 +39,10 @@ func TestComputeSenderHash(t *testing.T) {
 // RepliableInterval is 500, so datagram2 is used at counter 0, 500, 1000, etc.
 func TestSenderState(t *testing.T) {
 	state := &SenderState{
-		Destination:      i2pkeys.I2PAddr("test"),
-		Counter:          0,
-		UnackedDatagrams: make(map[uint64]time.Time),
+		Destination:       i2pkeys.I2PAddr("test"),
+		Counter:           0,
+		UnackedDatagrams:  make(map[uint64]time.Time),
+		LastDatagram2Time: time.Now(), // Set to prevent time-based trigger
 	}
 
 	// First message (counter=0) should use datagram2
