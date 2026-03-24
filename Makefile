@@ -26,3 +26,7 @@ link:
 
 fmt:
 	find . -name '*.go' -exec gofmt -w -s {} \;
+
+container-test:
+	docker build -f Dockerfile.test -t onramp-container-test .
+	docker run --rm onramp-container-test

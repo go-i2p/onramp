@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/go-i2p/go-sam-bridge/lib/embedding"
 	sam3 "github.com/go-i2p/go-sam-go"
@@ -803,6 +804,14 @@ func NewGarlic(tunName, samAddr string, options []string) (*Garlic, error) {
 	}
 	if g.Bridge != nil {
 		g.Bridge.Start(context.Background())
+		// Bridge.Start is non-blocking: the TCP accept loop runs in a goroutine.
+		// Wait until the SAM port is actually accepting connections before we
+		// attempt to create a SAM session, otherwise we race and get
+		// "connection refused".
+		if err := waitForSAMReady(g.getAddr(), 30*time.Second); err != nil {
+			log.WithError(err).Error("Embedded SAM bridge did not become ready")
+			return nil, fmt.Errorf("onramp NewGarlic: %v", err)
+		}
 	}
 	if g.SAM, err = g.samSession(); err != nil {
 		log.WithError(err).Error("Failed to create SAM session")
