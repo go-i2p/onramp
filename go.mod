@@ -6,7 +6,7 @@ toolchain go1.24.12
 
 require (
 	github.com/cretz/bine v0.2.0
-	github.com/go-i2p/go-sam-bridge v0.0.0-20260127191723-8e14472fcc26
+	github.com/go-i2p/go-sam-bridge e4bc30f619987c8bd2da71615639fb1a24a8bc30
 	github.com/go-i2p/go-sam-go v0.33.0
 	github.com/go-i2p/i2pkeys v0.33.92
 	github.com/go-i2p/logger v0.1.0
