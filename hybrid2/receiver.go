@@ -194,89 +194,93 @@ func (h *HybridSession) startReceiveLoops() {
 	go h.datagram3ReceiveLoop()
 }
 
+// reportRecvError sends a receive error to the error channel non-blocking.
+func (h *HybridSession) reportRecvError(err error) {
+	select {
+	case h.recvErrChan <- err:
+	default:
+		// Error channel full, skip
+	}
+}
+
 // datagram2ReceiveLoop continuously receives datagram2 messages and processes them.
 // When a datagram2 is received, it updates the sender mapping and forwards the
 // message to the unified receive channel.
 func (h *HybridSession) datagram2ReceiveLoop() {
-	// Note: The reader's receiveLoop must be started by the caller
-	// We use direct ReceiveDatagram calls here for simplicity
 	for {
 		select {
 		case <-h.recvStopChan:
 			return
 		default:
-			dg, err := h.datagram2Sub.ReceiveDatagram()
-			if err != nil {
-				// Check if we're closing
-				select {
-				case <-h.recvStopChan:
-					return
-				default:
-					// Report error but continue
-					select {
-					case h.recvErrChan <- fmt.Errorf("datagram2 receive: %w", err):
-					default:
-						// Error channel full, skip
-					}
-					continue
-				}
-			}
-
-			// Extract sender hash from the authenticated source
-			hash := ComputeSenderHash(dg.Source)
-
-			// Update the sender mapping (this is the authenticated identity)
-			h.receiverState.RegisterSender(hash, dg.Source)
-
-			// Check if this is an ACK-related message
-			isAckReq, isAckResp, seqNum, data := decodeAckMessage(dg.Data)
-
-			if isAckResp {
-				// This is an ACK response - process it
-				state := h.getSenderState(dg.Source)
-				state.processAck(seqNum)
-				// Don't forward ACK responses to application
-				continue
-			}
-
-			if isAckReq {
-				// This is an ACK request - send response synchronously
-				// Sending is fast (just a datagram write) and avoids goroutine overhead
-				// at high message rates. Errors are logged but don't block message processing.
-				if err := h.sendAckResponse(seqNum, dg.Source); err != nil {
-					// Log error but continue processing - ACK loss is handled by timeout
-					select {
-					case h.recvErrChan <- fmt.Errorf("ACK response send: %w", err):
-					default:
-						// Error channel full, skip
-					}
-				}
-				// Forward the original data (without ACK marker) to application
-			}
-
-			// Forward to unified receive channel
-			hybrid := &HybridDatagram{
-				Data:         data, // Use decoded data (ACK marker removed if present)
-				Source:       dg.Source,
-				SourceHash:   hash,
-				WasDatagram2: true,
-				Timestamp:    time.Now(),
-			}
-
-			select {
-			case h.recvChan <- hybrid:
-			case <-h.recvStopChan:
+			if stop := h.receiveDatagram2(); stop {
 				return
 			}
 		}
 	}
 }
 
+// receiveDatagram2 performs a single datagram2 receive iteration.
+// Returns true if the loop should stop.
+func (h *HybridSession) receiveDatagram2() bool {
+	dg, err := h.datagram2Sub.ReceiveDatagram()
+	if err != nil {
+		select {
+		case <-h.recvStopChan:
+			return true
+		default:
+			h.reportRecvError(fmt.Errorf("datagram2 receive: %w", err))
+			return false
+		}
+	}
+
+	hash := ComputeSenderHash(dg.Source)
+	h.receiverState.RegisterSender(hash, dg.Source)
+
+	data, forward := h.processDatagram2Ack(dg.Source, dg.Data)
+	if !forward {
+		return false
+	}
+
+	hybrid := &HybridDatagram{
+		Data:         data,
+		Source:       dg.Source,
+		SourceHash:   hash,
+		WasDatagram2: true,
+		Timestamp:    time.Now(),
+	}
+
+	select {
+	case h.recvChan <- hybrid:
+	case <-h.recvStopChan:
+		return true
+	}
+	return false
+}
+
+// processDatagram2Ack handles ACK message processing for a received datagram2.
+// Returns the payload data and true if the datagram should be forwarded to the application.
+func (h *HybridSession) processDatagram2Ack(source i2pkeys.I2PAddr, rawData []byte) ([]byte, bool) {
+	isAckReq, isAckResp, seqNum, data := decodeAckMessage(rawData)
+
+	if isAckResp {
+		state := h.getSenderState(source)
+		state.processAck(seqNum)
+		return nil, false
+	}
+
+	if isAckReq {
+		if err := h.sendAckResponse(seqNum, source); err != nil {
+			h.reportRecvError(fmt.Errorf("ACK response send: %w", err))
+		}
+	}
+
+	return data, true
+}
+
 // datagram3ReceiveLoop continuously receives datagram3 messages and processes them.
 // When a datagram3 is received, it attempts to resolve the sender hash using the
 // mapping table and forwards the message to the unified receive channel.
 func (h *HybridSession) datagram3ReceiveLoop() {
-	// Use the pre-allocated reader from initializeReceivers()
 	reader := h.datagram3Reader
 
 	for {
@@ -285,63 +289,60 @@ func (h *HybridSession) datagram3ReceiveLoop() {
 			reader.Close()
 			return
 		default:
-			dg, err := reader.ReceiveDatagram()
-			if err != nil {
-				// Check if we're closing
-				select {
-				case <-h.recvStopChan:
-					reader.Close()
-					return
-				default:
-					// Report error but continue
-					select {
-					case h.recvErrChan <- fmt.Errorf("datagram3 receive: %w", err):
-					default:
-						// Error channel full, skip
-					}
-					continue
-				}
-			}
-
-			// Copy the source hash from the datagram
-			var hash SenderHash
-			copy(hash[:], dg.SourceHash[:])
-
-			// Try to resolve the source from our mapping table
-			var source i2pkeys.I2PAddr
-			if dest, found := h.receiverState.LookupSender(hash); found {
-				source = dest
-			} else {
-				// Fallback: try to resolve using the session's resolver
-				// Note: This makes a network call to the SAM bridge
-				if err := dg.ResolveSource(h.datagram3Sub.Datagram3Session); err == nil {
-					source = dg.Source
-					// Cache the resolved source for future lookups
-					h.receiverState.RegisterSender(hash, source)
-				} else {
-					// Could not resolve - leave source empty
-					// Application will need to handle unknown sender
-					source = i2pkeys.I2PAddr("")
-				}
-			}
-
-			// Forward to unified receive channel
-			hybrid := &HybridDatagram{
-				Data:         dg.Data,
-				Source:       source,
-				SourceHash:   hash,
-				WasDatagram2: false,
-				Timestamp:    time.Now(),
-			}
-
-			select {
-			case h.recvChan <- hybrid:
-			case <-h.recvStopChan:
+			if stop := h.receiveDatagram3(reader); stop {
 				reader.Close()
 				return
 			}
 		}
 	}
+}
+
+// receiveDatagram3 performs a single datagram3 receive iteration.
+// Returns true if the loop should stop.
+func (h *HybridSession) receiveDatagram3(reader *datagram3.Datagram3Reader) bool {
+	dg, err := reader.ReceiveDatagram()
+	if err != nil {
+		select {
+		case <-h.recvStopChan:
+			return true
+		default:
+			h.reportRecvError(fmt.Errorf("datagram3 receive: %w", err))
+			return false
+		}
+	}
+
+	var hash SenderHash
+	copy(hash[:], dg.SourceHash[:])
+
+	source := h.lookupOrResolveDatagram3Source(dg, hash)
+
+	hybrid := &HybridDatagram{
+		Data:         dg.Data,
+		Source:       source,
+		SourceHash:   hash,
+		WasDatagram2: false,
+		Timestamp:    time.Now(),
+	}
+
+	select {
+	case h.recvChan <- hybrid:
+	case <-h.recvStopChan:
+		return true
+	}
+	return false
+}
+
+// lookupOrResolveDatagram3Source resolves a datagram3 sender from the hash mapping table,
+// falling back to SAM bridge resolution when the hash is not cached.
+func (h *HybridSession) lookupOrResolveDatagram3Source(dg *datagram3.Datagram3, hash SenderHash) i2pkeys.I2PAddr {
+	if dest, found := h.receiverState.LookupSender(hash); found {
+		return dest
+	}
+	if err := dg.ResolveSource(h.datagram3Sub.Datagram3Session); err == nil {
+		h.receiverState.RegisterSender(hash, dg.Source)
+		return dg.Source
+	}
+	return i2pkeys.I2PAddr("")
 }
 
 // ReceiveDatagram receives the next datagram from either subsession.
