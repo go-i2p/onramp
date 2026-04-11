@@ -142,9 +142,16 @@ func createTLSCertificate(host string) error {
 		return err
 	}
 
+	if err := persistTLSCertFiles(host, privStore, tlsCert, priv); err != nil {
+		return err
+	}
+	return persistTLSCRL(host, privStore, tlsCert, priv)
+}
+
+// persistTLSCertFiles writes the certificate and private key PEM files to disk.
+func persistTLSCertFiles(host, privStore string, tlsCert []byte, priv *ecdsa.PrivateKey) error {
 	certFile := filepath.Join(privStore, host+".crt")
 	log.WithField("path", certFile).Debug("Saving TLS certificate")
-	// save the TLS certificate
 	certOut, err := os.Create(certFile)
 	if err != nil {
 		log.WithError(err).WithField("path", certFile).Error("Failed to create certificate file")
@@ -154,7 +161,6 @@ func createTLSCertificate(host string) error {
 	certOut.Close()
 	log.WithField("path", certFile).Debug("TLS certificate saved successfully")
 
-	// save the TLS private key
 	privFile := filepath.Join(privStore, host+".pem")
 	log.WithField("path", privFile).Debug("Saving TLS private key")
 	keyOut, err := os.OpenFile(privFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
@@ -175,11 +181,13 @@ func createTLSCertificate(host string) error {
 	}
 	pem.Encode(keyOut, &pem.Block{Type: "EC PRIVATE KEY", Bytes: ecder})
 	pem.Encode(keyOut, &pem.Block{Type: "CERTIFICATE", Bytes: tlsCert})
-
 	keyOut.Close()
 	log.WithField("path", privFile).Debug("TLS private key saved successfully")
+	return nil
+}
 
-	// CRL
+// persistTLSCRL generates a CRL for the certificate and writes it to disk.
+func persistTLSCRL(host, privStore string, tlsCert []byte, priv *ecdsa.PrivateKey) error {
 	crlFile := filepath.Join(privStore, host+".crl")
 	log.WithField("path", crlFile).Debug("Creating CRL")
 	crlOut, err := os.OpenFile(crlFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
@@ -192,7 +200,6 @@ func createTLSCertificate(host string) error {
 		log.WithError(err).Error("Failed to parse certificate for CRL creation")
 		return fmt.Errorf("Certificate with unknown critical extension was not parsed: %s", err)
 	}
-
 	now := time.Now()
 	crlTemplate := &x509.RevocationList{
 		RevokedCertificateEntries: []x509.RevocationListEntry{
@@ -218,7 +225,6 @@ func createTLSCertificate(host string) error {
 	pem.Encode(crlOut, &pem.Block{Type: "X509 CRL", Bytes: crlBytes})
 	crlOut.Close()
 	log.WithField("path", crlFile).Debug("TLS CRL saved successfully")
-
 	return nil
 }
 
