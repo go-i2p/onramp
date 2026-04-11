@@ -1,0 +1,32 @@
+# Dockerfile.test — Container-isolated test environment for onramp.
+# Uses the embedded go-i2p router exclusively (no external I2P network).
+#
+# Build & run:
+#   docker build -f Dockerfile.test -t onramp-test .
+#   docker run --rm onramp-test
+#
+# Or use the helper script:
+#   ./container_test.sh
+FROM golang:1.24-bookworm
+
+# Install minimal runtime deps (the embedded router is pure Go)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+
+# Cache module downloads
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source
+COPY . .
+
+# Ports 7654 (I2CP) and 7656 (SAM) must be free inside the container
+# so the embedded router starts automatically. No EXPOSE needed —
+# everything is container-local.
+
+# Run only the container-tagged tests with a generous timeout.
+# The embedded I2P router needs time to bootstrap tunnels.
+ENTRYPOINT ["go", "test", "-v", "-tags", "container", "-run", "Container", "-count=1", "-timeout", "20m", "./..."]
