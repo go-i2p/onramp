@@ -37,8 +37,8 @@ github.com/go-i2p/go-noise v0.1.4-0.20260402003936-5386860e3a96 h1:7KrMcUpL7g1zg
 github.com/go-i2p/go-noise v0.1.4-0.20260402003936-5386860e3a96/go.mod h1:CLk+IyYcbzv5O6PNw0bE1v/1Q7BVgd51XOCPr7Lfu8I=
 github.com/go-i2p/go-sam-bridge v0.1.4-0.20260404032345-e4bc30f61998 h1:F1nHZ/y8HLslP81zuPh2uzKQud7jo5DHchzA3xerSg8=
 github.com/go-i2p/go-sam-bridge v0.1.4-0.20260404032345-e4bc30f61998/go.mod h1:0ijevC0IRiuiyYyxAajrPuQ4+7y9/B7cRE21jXlnqqg=
-github.com/go-i2p/go-sam-go v0.33.0 h1:4V9eSc0jBmWOEK6kWnujvoAcbdrYyZQRczZ3NRYSDFU=
-github.com/go-i2p/go-sam-go v0.33.0/go.mod h1:yh0p4igH39DL3ZLni40lzCb9NxQcZF0jqDYCiPNqAv8=
+github.com/go-i2p/go-sam-go v0.33.1-0.20260411195601-326503e35a5c h1:CGepwWtODhrXQ7ebDPB2jIz740LWqWTaw1jVYogrzcM=
+github.com/go-i2p/go-sam-go v0.33.1-0.20260411195601-326503e35a5c/go.mod h1:yh0p4igH39DL3ZLni40lzCb9NxQcZF0jqDYCiPNqAv8=
 github.com/go-i2p/go-streaming v0.1.2 h1:INnOj7iXB+hjF8fHjhLtt+gXkDC+ZU9fbU9PsigujMI=
 github.com/go-i2p/go-streaming v0.1.2/go.mod h1:HYmKY0xIubvbNsFWyFBRkdBT+wOEJOOtDWItddukC1I=
 github.com/go-i2p/i2pkeys v0.33.92 h1:e2vx3vf7tNesaJ8HmAlGPOcfiGM86jzeIGxh27I9J2Y=

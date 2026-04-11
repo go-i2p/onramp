@@ -5,7 +5,7 @@ go 1.25.0
 require (
 	github.com/cretz/bine v0.2.0
 	github.com/go-i2p/go-sam-bridge v0.1.4-0.20260404032345-e4bc30f61998
-	github.com/go-i2p/go-sam-go v0.33.0
+	github.com/go-i2p/go-sam-go v0.33.1-0.20260411195601-326503e35a5c
 	github.com/go-i2p/i2pkeys v0.33.92
 	github.com/go-i2p/logger v0.1.5
 )
