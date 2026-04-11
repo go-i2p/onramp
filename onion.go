@@ -440,13 +440,19 @@ func ListenOnion(network, keys string) (net.Listener, error) {
 // corresponding to a structure managed by the onramp library
 // and not instantiated by an app.
 func DialOnion(network, addr string) (net.Conn, error) {
-	g, err := NewOnion(addr)
-	if err != nil {
-		return nil, fmt.Errorf("onramp Dial: %v", err)
-	}
 	onionsMu.Lock()
-	onions[addr] = g
+	g, ok := onions[addr]
 	onionsMu.Unlock()
+	if !ok {
+		var err error
+		g, err = NewOnion(addr)
+		if err != nil {
+			return nil, fmt.Errorf("onramp Dial: %v", err)
+		}
+		onionsMu.Lock()
+		onions[addr] = g
+		onionsMu.Unlock()
+	}
 	return g.Dial(network, addr)
 }
 

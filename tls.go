@@ -107,11 +107,9 @@ func CreateTLSCertificate(tlsHost string) error {
 		}).Debug("Certificate or key missing, generating new ones")
 		if certErr != nil {
 			log.WithField("path", tlsCert).Debug("TLS certificate not found")
-			fmt.Printf("Unable to read TLS certificate '%s'\n", tlsCert)
 		}
 		if keyErr != nil {
 			log.WithField("path", tlsKey).Debug("TLS key not found")
-			fmt.Printf("Unable to read TLS key '%s'\n", tlsKey)
 		}
 
 		if err := createTLSCertificate(tlsHost); nil != err {
@@ -127,7 +125,6 @@ func CreateTLSCertificate(tlsHost string) error {
 
 func createTLSCertificate(host string) error {
 	log.WithField("host", host).Debug("Generating new TLS certificate")
-	fmt.Println("Generating TLS keys. This may take a minute...")
 	priv, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
 	if err != nil {
 		log.WithError(err).Error("Failed to generate private key")
@@ -156,7 +153,6 @@ func createTLSCertificate(host string) error {
 	pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: tlsCert})
 	certOut.Close()
 	log.WithField("path", certFile).Debug("TLS certificate saved successfully")
-	fmt.Printf("\tTLS certificate saved to: %s\n", host+".crt")
 
 	// save the TLS private key
 	privFile := filepath.Join(privStore, host+".pem")
@@ -182,7 +178,6 @@ func createTLSCertificate(host string) error {
 
 	keyOut.Close()
 	log.WithField("path", privFile).Debug("TLS private key saved successfully")
-	fmt.Printf("\tTLS private key saved to: %s\n", privFile)
 
 	// CRL
 	crlFile := filepath.Join(privStore, host+".crl")
@@ -222,7 +217,7 @@ func createTLSCertificate(host string) error {
 	}
 	pem.Encode(crlOut, &pem.Block{Type: "X509 CRL", Bytes: crlBytes})
 	crlOut.Close()
-	fmt.Printf("\tTLS CRL saved to: %s\n", crlFile)
+	log.WithField("path", crlFile).Debug("TLS CRL saved successfully")
 
 	return nil
 }

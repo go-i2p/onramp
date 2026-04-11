@@ -91,6 +91,9 @@ func (r *cleanupRegistry) cleanupAll() {
 			log.WithError(err).WithField("name", g.getName()).Error("Error during cleanup")
 		}
 	}
+
+	// Also close managed Onion instances and the shared Tor process
+	CloseAllOnion()
 }
 
 // setupFinalizer sets up a runtime finalizer for the Garlic instance.

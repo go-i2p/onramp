@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/go-i2p/logger"
 )
@@ -39,52 +40,33 @@ func GetJoinedWD(dir string) (string, error) {
 	return ajwd, nil
 }
 
-var (
-	// Default keystore paths. Errors during initialization are logged.
-	// If initialization fails, paths will be empty strings and
-	// the corresponding *KeystorePath() functions will attempt
-	// to create the directories on first use.
-	i2pdefault = initKeystorePath("i2pkeys")
-	tordefault = initKeystorePath("onionkeys")
-	tlsdefault = initKeystorePath("tlskeys")
-)
-
-// initKeystorePath attempts to initialize a keystore path at package load time.
-// If initialization fails, it logs the error and returns an empty string.
-// The corresponding *KeystorePath() functions will retry directory creation.
-func initKeystorePath(dir string) string {
-	path, err := GetJoinedWD(dir)
-	if err != nil {
-		// Log the error during initialization - this helps diagnose
-		// issues when the working directory is inaccessible.
-		// The keystore path functions will retry on first use.
-		log.WithError(err).WithField("directory", dir).Warn(
-			"Failed to initialize keystore path at startup, will retry on first use")
-		return ""
-	}
-	return path
-}
+// keystoreMu protects the keystore path variables from concurrent access.
+var keystoreMu sync.Mutex
 
 // I2P_KEYSTORE_PATH is the place where I2P Keys will be saved.
-// it defaults to the directory "i2pkeys" current working directory.
-// reference it by calling I2PKeystorePath() to check for errors
-var I2P_KEYSTORE_PATH = i2pdefault
+// It defaults to the directory "i2pkeys" in the current working directory.
+// Reference it by calling I2PKeystorePath() to check for errors.
+// Assign before concurrent use; the accessor functions are goroutine-safe.
+var I2P_KEYSTORE_PATH string
 
 // ONION_KEYSTORE_PATH is the place where Onion Keys will be saved.
-// it defaults to the directory "onionkeys" current working directory.
-// reference it by calling OnionKeystorePath() to check for errors
-var ONION_KEYSTORE_PATH = tordefault
+// It defaults to the directory "onionkeys" in the current working directory.
+// Reference it by calling TorKeystorePath() to check for errors.
+// Assign before concurrent use; the accessor functions are goroutine-safe.
+var ONION_KEYSTORE_PATH string
 
 // TLS_KEYSTORE_PATH is the place where TLS Keys will be saved.
-// it defaults to the directory "tlskeys" current working directory.
-// reference it by calling TLSKeystorePath() to check for errors
-var TLS_KEYSTORE_PATH = tlsdefault
+// It defaults to the directory "tlskeys" in the current working directory.
+// Reference it by calling TLSKeystorePath() to check for errors.
+// Assign before concurrent use; the accessor functions are goroutine-safe.
+var TLS_KEYSTORE_PATH string
 
 // I2PKeystorePath returns the path to the I2P Keystore. If the
 // path is not set, it returns the default path. If the path does
 // not exist, it creates it.
 func I2PKeystorePath() (string, error) {
-	// If path is empty (initialization failed), attempt to reinitialize
+	keystoreMu.Lock()
+	defer keystoreMu.Unlock()
 	if I2P_KEYSTORE_PATH == "" {
 		log.Debug("I2P keystore path is empty, attempting to reinitialize")
 		path, err := GetJoinedWD("i2pkeys")
@@ -109,6 +91,8 @@ func I2PKeystorePath() (string, error) {
 
 // DeleteI2PKeyStore deletes the I2P Keystore.
 func DeleteI2PKeyStore() error {
+	keystoreMu.Lock()
+	defer keystoreMu.Unlock()
 	log.WithField("path", I2P_KEYSTORE_PATH).Debug("Attempting to delete I2P keystore")
 	err := os.RemoveAll(I2P_KEYSTORE_PATH)
 	if err != nil {
@@ -124,7 +108,8 @@ func DeleteI2PKeyStore() error {
 // path is not set, it returns the default path. If the path does
 // not exist, it creates it.
 func TorKeystorePath() (string, error) {
-	// If path is empty (initialization failed), attempt to reinitialize
+	keystoreMu.Lock()
+	defer keystoreMu.Unlock()
 	if ONION_KEYSTORE_PATH == "" {
 		log.Debug("Tor keystore path is empty, attempting to reinitialize")
 		path, err := GetJoinedWD("onionkeys")
@@ -149,6 +134,8 @@ func TorKeystorePath() (string, error) {
 
 // DeleteTorKeyStore deletes the Onion Keystore.
 func DeleteTorKeyStore() error {
+	keystoreMu.Lock()
+	defer keystoreMu.Unlock()
 	log.WithField("path", ONION_KEYSTORE_PATH).Debug("Attempting to delete Tor keystore")
 	err := os.RemoveAll(ONION_KEYSTORE_PATH)
 	if err != nil {
@@ -164,7 +151,8 @@ func DeleteTorKeyStore() error {
 // path is not set, it returns the default path. If the path does
 // not exist, it creates it.
 func TLSKeystorePath() (string, error) {
-	// If path is empty (initialization failed), attempt to reinitialize
+	keystoreMu.Lock()
+	defer keystoreMu.Unlock()
 	if TLS_KEYSTORE_PATH == "" {
 		log.Debug("TLS keystore path is empty, attempting to reinitialize")
 		path, err := GetJoinedWD("tlskeys")
@@ -189,6 +177,8 @@ func TLSKeystorePath() (string, error) {
 
 // DeleteTLSKeyStore deletes the TLS Keystore.
 func DeleteTLSKeyStore() error {
+	keystoreMu.Lock()
+	defer keystoreMu.Unlock()
 	log.WithField("path", TLS_KEYSTORE_PATH).Debug("Attempting to delete TLS keystore")
 	err := os.RemoveAll(TLS_KEYSTORE_PATH)
 	if err != nil {

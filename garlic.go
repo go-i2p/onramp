@@ -579,37 +579,7 @@ func (g *Garlic) ListenTLS(args ...string) (net.Listener, error) {
 // This method now uses PRIMARY sessions with stream subsessions for efficient
 // tunnel sharing. All outbound connections share the same tunnels as the listener.
 func (g *Garlic) Dial(net, addr string) (net.Conn, error) {
-	log.WithFields(logger.Fields{
-		"network": net,
-		"address": addr,
-	}).Debug("Attempting to dial")
-
-	if !strings.Contains(addr, ".i2p") {
-		log.WithField("address", addr).Error("Cannot dial non-I2P address with Garlic")
-		return nil, fmt.Errorf("onramp Dial: address %q is not an I2P address (must contain .i2p)", addr)
-	}
-
-	var err error
-	if g.SAM, err = g.samSession(); err != nil {
-		log.WithError(err).Error("Failed to create SAM session")
-		return nil, fmt.Errorf("onramp Dial: %v", err)
-	}
-
-	// Setup stream subsession instead of old stream session
-	if g.streamSub, err = g.setupStreamSubSession(); err != nil {
-		log.WithError(err).Error("Failed to setup stream subsession")
-		return nil, fmt.Errorf("onramp Dial: %v", err)
-	}
-
-	log.Debug("Attempting to establish connection")
-	conn, err := g.streamSub.StreamSession.Dial(addr)
-	if err != nil {
-		log.WithError(err).Error("Failed to establish connection")
-		return nil, err
-	}
-
-	log.Debug("Successfully established connection")
-	return conn, nil
+	return g.DialContext(context.Background(), net, addr)
 }
 
 // DialContext returns a net.Conn for the Garlic structure's I2P keys with context support.

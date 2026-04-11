@@ -365,8 +365,8 @@ func TestOnrampProxy_Initialization(t *testing.T) {
 	// The struct should contain Onion and Garlic fields
 	// We can't test much without actual SAM/Tor connections,
 	// but we can verify the struct exists
-	_ = p.Onion
-	_ = p.Garlic
+	_ = &p.Onion
+	_ = &p.Garlic
 }
 
 // TestMockConn_ReadWrite tests the mock connection implementation
