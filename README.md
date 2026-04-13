@@ -226,6 +226,59 @@ func main() {
 - Most flexibility
 - Native SAM3 datagram support
 
+### Configuration Presets
+
+`OPT_DEFAULTS`, `OPT_WIDE`, `OPT_HUGE`, `OPT_LARGE`, `OPT_MEDIUM`, and `OPT_SMALL` control
+the number of I2P tunnels created for a `Garlic` session. More tunnels provide greater
+redundancy and anonymity but consume more router resources and bandwidth.
+
+```go
+// Use a high-bandwidth preset for a busy server
+garlic, err := onramp.NewGarlic("myservice", onramp.SAM_ADDR, onramp.OPT_WIDE)
+
+// Use a minimal preset for a lightweight client
+garlic, err := onramp.NewGarlic("myclient", onramp.SAM_ADDR, onramp.OPT_SMALL)
+```
+
+| Preset | Tunnels | Best For |
+|--------|---------|----------|
+| `OPT_SMALL` | Minimal | Lightweight clients, low-traffic services |
+| `OPT_DEFAULTS` | Balanced | Most applications (default) |
+| `OPT_MEDIUM` | Moderate | Services with moderate traffic |
+| `OPT_WIDE` | Many | High-traffic servers requiring path diversity |
+| `OPT_LARGE` | Many+ | Busy services needing strong redundancy |
+| `OPT_HUGE` | Maximum | Maximum-throughput, resource-rich servers |
+
+### Bidirectional Proxy
+
+`OnrampProxy` exposes a local service as an I2P or Tor hidden service by bridging
+an inbound `net.Listener` to a remote address. The `Proxy()` package-level convenience
+function uses a default instance.
+
+```go
+// Expose a local HTTP server on I2P
+garlic, err := onramp.NewGarlic("myproxy", onramp.SAM_ADDR, onramp.OPT_DEFAULTS)
+if err != nil {
+    log.Fatal(err)
+}
+listener, err := garlic.Listen()
+if err != nil {
+    log.Fatal(err)
+}
+// Bridge the I2P listener to a local service running on :8080
+err = onramp.Proxy(listener, "localhost:8080")
+```
+
+### NullConn
+
+`NullConn` is a no-op `net.Conn` that discards writes and returns `io.EOF` on reads.
+It is useful as a placeholder when a `net.Conn` is required but no underlying
+connection is available (e.g. in tests or stub implementations).
+
+```go
+var conn net.Conn = &onramp.NullConn{}
+```
+
 ## Verbosity ##
 
 Logging is provided by the `github.com/go-i2p/logger` package, which offers structured logging with advanced debugging features.
