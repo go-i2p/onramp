@@ -680,11 +680,12 @@ func (g *Garlic) Close() error {
 	g.hybrid2Sub = nil
 	g.hybrid1Sub = nil
 
-	if len(errors) > 0 {
-		return fmt.Errorf("onramp Close: %v", errors)
-	}
 	if g.Bridge != nil {
 		g.Bridge.Stop(context.Background())
+	}
+
+	if len(errors) > 0 {
+		return fmt.Errorf("onramp Close: %v", errors)
 	}
 
 	log.Debug("All sessions closed successfully")
@@ -854,6 +855,7 @@ func I2PKeys(tunName, samAddr string) (i2pkeys.I2PKeys, error) {
 			log.WithError(err).Error("Failed to create SAM connection")
 			return i2pkeys.I2PKeys{}, fmt.Errorf("onramp I2PKeys: SAM error %v", err)
 		}
+		defer sam.Close()
 		log.Debug("SAM connection established")
 		keys, err := sam.NewKeys(tunName)
 		if err != nil {

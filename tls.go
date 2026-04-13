@@ -149,7 +149,7 @@ func createTLSCertificate(host string) error {
 }
 
 // persistTLSCertFiles writes the certificate and private key PEM files to disk.
-func persistTLSCertFiles(host, privStore string, tlsCert []byte, priv *ecdsa.PrivateKey) error {
+func persistTLSCertFiles(host, privStore string, tlsCert []byte, priv *ecdsa.PrivateKey) (retErr error) {
 	certFile := filepath.Join(privStore, host+".crt")
 	log.WithField("path", certFile).Debug("Saving TLS certificate")
 	certOut, err := os.Create(certFile)
@@ -157,8 +157,12 @@ func persistTLSCertFiles(host, privStore string, tlsCert []byte, priv *ecdsa.Pri
 		log.WithError(err).WithField("path", certFile).Error("Failed to create certificate file")
 		return fmt.Errorf("failed to open %s for writing: %s", host+".crt", err)
 	}
+	defer func() {
+		if err := certOut.Close(); retErr == nil {
+			retErr = err
+		}
+	}()
 	pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: tlsCert})
-	certOut.Close()
 	log.WithField("path", certFile).Debug("TLS certificate saved successfully")
 
 	privFile := filepath.Join(privStore, host+".pem")
@@ -168,6 +172,11 @@ func persistTLSCertFiles(host, privStore string, tlsCert []byte, priv *ecdsa.Pri
 		log.WithError(err).WithField("path", privFile).Error("Failed to create private key file")
 		return fmt.Errorf("failed to open %s for writing: %v", privFile, err)
 	}
+	defer func() {
+		if err := keyOut.Close(); retErr == nil {
+			retErr = err
+		}
+	}()
 	secp384r1, err := asn1.Marshal(asn1.ObjectIdentifier{1, 3, 132, 0, 34}) // http://www.ietf.org/rfc/rfc5480.txt
 	if err != nil {
 		log.WithError(err).Error("Failed to marshal EC parameters")
@@ -181,13 +190,12 @@ func persistTLSCertFiles(host, privStore string, tlsCert []byte, priv *ecdsa.Pri
 	}
 	pem.Encode(keyOut, &pem.Block{Type: "EC PRIVATE KEY", Bytes: ecder})
 	pem.Encode(keyOut, &pem.Block{Type: "CERTIFICATE", Bytes: tlsCert})
-	keyOut.Close()
 	log.WithField("path", privFile).Debug("TLS private key saved successfully")
 	return nil
 }
 
 // persistTLSCRL generates a CRL for the certificate and writes it to disk.
-func persistTLSCRL(host, privStore string, tlsCert []byte, priv *ecdsa.PrivateKey) error {
+func persistTLSCRL(host, privStore string, tlsCert []byte, priv *ecdsa.PrivateKey) (retErr error) {
 	crlFile := filepath.Join(privStore, host+".crl")
 	log.WithField("path", crlFile).Debug("Creating CRL")
 	crlOut, err := os.OpenFile(crlFile, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
@@ -195,6 +203,11 @@ func persistTLSCRL(host, privStore string, tlsCert []byte, priv *ecdsa.PrivateKe
 		log.WithError(err).WithField("path", crlFile).Error("Failed to create CRL file")
 		return fmt.Errorf("failed to open %s for writing: %s", crlFile, err)
 	}
+	defer func() {
+		if err := crlOut.Close(); retErr == nil {
+			retErr = err
+		}
+	}()
 	crlcert, err := x509.ParseCertificate(tlsCert)
 	if err != nil {
 		log.WithError(err).Error("Failed to parse certificate for CRL creation")
@@ -223,7 +236,6 @@ func persistTLSCRL(host, privStore string, tlsCert []byte, priv *ecdsa.PrivateKe
 		return fmt.Errorf("error reparsing CRL: %s", err)
 	}
 	pem.Encode(crlOut, &pem.Block{Type: "X509 CRL", Bytes: crlBytes})
-	crlOut.Close()
 	log.WithField("path", crlFile).Debug("TLS CRL saved successfully")
 	return nil
 }

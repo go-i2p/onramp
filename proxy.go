@@ -50,6 +50,7 @@ func (p *OnrampProxy) proxy(conn net.Conn, raddr string) {
 		"local_addr":     conn.LocalAddr().String(),
 		"remote_addr":    conn.RemoteAddr().String(),
 	}).Debug("Setting up proxy connection")
+	defer conn.Close()
 
 	var remote net.Conn
 	var err error
@@ -66,8 +67,6 @@ func (p *OnrampProxy) proxy(conn net.Conn, raddr string) {
 	}
 	if err != nil {
 		log.WithError(err).Error("Failed to establish remote connection")
-		// Close the client connection and return instead of terminating the application
-		conn.Close()
 		return
 	}
 	defer remote.Close()
