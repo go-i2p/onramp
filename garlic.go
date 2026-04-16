@@ -517,13 +517,18 @@ func (g *Garlic) ListenPacketHybrid2() (net.PacketConn, error) {
 // ListenTLS returns a net.Listener for the Garlic structure's I2P keys,
 // which also uses TLS either for additional encryption, authentication,
 // or browser-compatibility.
-func (g *Garlic) ListenTLS(args ...string) (net.Listener, error) {
+func (g *Garlic) ListenTLS(args ...string) (retListener net.Listener, retErr error) {
 	log.WithField("args", args).Debug("Starting TLS listener")
 	listener, err := g.Listen(args...)
 	if err != nil {
 		log.WithError(err).Error("Failed to create base listener")
 		return nil, err
 	}
+	defer func() {
+		if retErr != nil {
+			listener.Close()
+		}
+	}()
 	cert, err := g.TLSKeys()
 	if err != nil {
 		log.WithError(err).Error("Failed to get TLS keys")
@@ -781,11 +786,15 @@ func NewGarlic(tunName, samAddr string, options []string) (*Garlic, error) {
 		// "connection refused".
 		if err := waitForSAMReady(g.getAddr(), 30*time.Second); err != nil {
 			log.WithError(err).Error("Embedded SAM bridge did not become ready")
+			g.Bridge.Stop(context.Background())
 			return nil, fmt.Errorf("onramp NewGarlic: %v", err)
 		}
 	}
 	if g.SAM, err = g.samSession(); err != nil {
 		log.WithError(err).Error("Failed to create SAM session")
+		if g.Bridge != nil {
+			g.Bridge.Stop(context.Background())
+		}
 		return nil, fmt.Errorf("onramp NewGarlic: %v", err)
 	}
 	// PRIMARY sessions are created lazily on first use (e.g., ListenStream, Dial, ListenPacket)

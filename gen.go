@@ -15,6 +15,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer file.Close()
 	cmd.Stdout = file
 	cmd.Stderr = os.Stderr
 	err = cmd.Run()

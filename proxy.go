@@ -4,6 +4,7 @@ import (
 	"io"
 	"net"
 	"strings"
+	"sync"
 
 	"github.com/go-i2p/logger"
 )
@@ -76,8 +77,11 @@ func (p *OnrampProxy) proxy(conn net.Conn, raddr string) {
 		"remote_addr": remote.RemoteAddr().String(),
 	}).Debug("Remote connection established, starting bidirectional copy")
 
-	go io.Copy(remote, conn)
-	io.Copy(conn, remote)
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() { defer wg.Done(); io.Copy(remote, conn) }()
+	go func() { defer wg.Done(); io.Copy(conn, remote) }()
+	wg.Wait()
 }
 
 var proxy *OnrampProxy = &OnrampProxy{}

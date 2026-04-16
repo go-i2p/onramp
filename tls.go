@@ -162,7 +162,10 @@ func persistTLSCertFiles(host, privStore string, tlsCert []byte, priv *ecdsa.Pri
 			retErr = err
 		}
 	}()
-	pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: tlsCert})
+	if err := pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: tlsCert}); err != nil {
+		log.WithError(err).Error("Failed to encode certificate PEM")
+		return fmt.Errorf("failed to encode certificate PEM: %w", err)
+	}
 	log.WithField("path", certFile).Debug("TLS certificate saved successfully")
 
 	privFile := filepath.Join(privStore, host+".pem")
@@ -182,14 +185,23 @@ func persistTLSCertFiles(host, privStore string, tlsCert []byte, priv *ecdsa.Pri
 		log.WithError(err).Error("Failed to marshal EC parameters")
 		return err
 	}
-	pem.Encode(keyOut, &pem.Block{Type: "EC PARAMETERS", Bytes: secp384r1})
+	if err := pem.Encode(keyOut, &pem.Block{Type: "EC PARAMETERS", Bytes: secp384r1}); err != nil {
+		log.WithError(err).Error("Failed to encode EC parameters PEM")
+		return fmt.Errorf("failed to encode EC parameters PEM: %w", err)
+	}
 	ecder, err := x509.MarshalECPrivateKey(priv)
 	if err != nil {
 		log.WithError(err).Error("Failed to marshal private key")
 		return err
 	}
-	pem.Encode(keyOut, &pem.Block{Type: "EC PRIVATE KEY", Bytes: ecder})
-	pem.Encode(keyOut, &pem.Block{Type: "CERTIFICATE", Bytes: tlsCert})
+	if err := pem.Encode(keyOut, &pem.Block{Type: "EC PRIVATE KEY", Bytes: ecder}); err != nil {
+		log.WithError(err).Error("Failed to encode EC private key PEM")
+		return fmt.Errorf("failed to encode EC private key PEM: %w", err)
+	}
+	if err := pem.Encode(keyOut, &pem.Block{Type: "CERTIFICATE", Bytes: tlsCert}); err != nil {
+		log.WithError(err).Error("Failed to encode certificate PEM in key file")
+		return fmt.Errorf("failed to encode certificate PEM in key file: %w", err)
+	}
 	log.WithField("path", privFile).Debug("TLS private key saved successfully")
 	return nil
 }
@@ -235,7 +247,10 @@ func persistTLSCRL(host, privStore string, tlsCert []byte, priv *ecdsa.PrivateKe
 		log.WithError(err).Error("Failed to validate generated CRL")
 		return fmt.Errorf("error reparsing CRL: %s", err)
 	}
-	pem.Encode(crlOut, &pem.Block{Type: "X509 CRL", Bytes: crlBytes})
+	if err := pem.Encode(crlOut, &pem.Block{Type: "X509 CRL", Bytes: crlBytes}); err != nil {
+		log.WithError(err).Error("Failed to encode CRL PEM")
+		return fmt.Errorf("failed to encode CRL PEM: %w", err)
+	}
 	log.WithField("path", crlFile).Debug("TLS CRL saved successfully")
 	return nil
 }

@@ -308,14 +308,13 @@ func NewOnion(name string) (*Onion, error) {
 // TorKeys returns a key pair which will be stored at the given key
 // name in the key store. If the key already exists, it will be
 // returned. If it does not exist, it will be generated.
-func TorKeys(keyName string) (ed25519.KeyPair, error) {
+func TorKeys(keyName string) (keys ed25519.KeyPair, retErr error) {
 	log.WithField("key_name", keyName).Debug("Getting Tor keys")
 	keystore, err := TorKeystorePath()
 	if err != nil {
 		log.WithError(err).Error("Failed to get keystore path")
 		return nil, fmt.Errorf("onramp OnionKeys: discovery error %v", err)
 	}
-	var keys ed25519.KeyPair
 	keysPath := filepath.Join(keystore, keyName+".tor.private")
 	log.WithField("path", keysPath).Debug("Checking for existing keys")
 	if _, err := os.Stat(keysPath); os.IsNotExist(err) {
@@ -333,7 +332,11 @@ func TorKeys(keyName string) (ed25519.KeyPair, error) {
 			log.WithError(err).Error("Failed to create Tor keys file")
 			return nil, fmt.Errorf("onramp TorKeys: failed to create key file: %w", err)
 		}
-		defer f.Close()
+		defer func() {
+			if err := f.Close(); retErr == nil {
+				retErr = err
+			}
+		}()
 		_, err = f.Write(tkeys.PrivateKey())
 		if err != nil {
 			log.WithError(err).Error("Failed to write Tor keys to disk")
