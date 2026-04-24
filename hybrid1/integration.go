@@ -7,6 +7,7 @@ import (
 	sam3 "github.com/go-i2p/go-sam-go"
 	"github.com/go-i2p/go-sam-go/primary"
 	"github.com/go-i2p/i2pkeys"
+	"github.com/go-i2p/onramp/internal/hybridcommon"
 )
 
 // GarlicIntegration provides methods to integrate hybrid1 with the Garlic struct.
@@ -64,33 +65,12 @@ func NewGarlicIntegration(samAddr, name string, opts ...IntegrationOption) (*Gar
 		name: name,
 	}
 
-	// Apply options.
-	for _, opt := range opts {
-		opt(gi)
-	}
+	hybridcommon.ApplyOptions(gi, opts)
 
-	// Create SAM connection.
 	var err error
-	gi.sam, err = sam3.NewSAM(samAddr)
+	gi.sam, gi.primary, err = hybridcommon.SetupManagedPrimary(samAddr, name, "hybrid1 integration", &gi.keys, gi.options)
 	if err != nil {
-		return nil, fmt.Errorf("hybrid1 integration: creating SAM connection: %w", err)
-	}
-
-	// Generate keys if not provided.
-	if gi.keys == nil {
-		keys, err := gi.sam.NewKeys()
-		if err != nil {
-			gi.sam.Close()
-			return nil, fmt.Errorf("hybrid1 integration: generating keys: %w", err)
-		}
-		gi.keys = &keys
-	}
-
-	// Create primary session.
-	gi.primary, err = gi.sam.NewPrimarySession(name, *gi.keys, gi.options)
-	if err != nil {
-		gi.sam.Close()
-		return nil, fmt.Errorf("hybrid1 integration: creating primary session: %w", err)
+		return nil, err
 	}
 
 	// Create hybrid1 session.
@@ -100,8 +80,7 @@ func NewGarlicIntegration(samAddr, name string, opts ...IntegrationOption) (*Gar
 	}
 	gi.hybrid1, err = NewHybrid1Session(gi.primary, name+"-hybrid1", hybrid1Opts...)
 	if err != nil {
-		gi.primary.Close()
-		gi.sam.Close()
+		_ = hybridcommon.CloseManagedResources("hybrid1 integration", "hybrid1 session", nil, gi.primary, gi.sam)
 		return nil, fmt.Errorf("hybrid1 integration: creating hybrid1 session: %w", err)
 	}
 
@@ -141,32 +120,7 @@ func NewGarlicIntegrationFromPrimary(primarySession *primary.PrimarySession, nam
 
 // Close closes all resources associated with this integration.
 func (gi *GarlicIntegration) Close() error {
-	var errors []error
-
-	// Close hybrid1 session.
-	if gi.hybrid1 != nil {
-		if err := gi.hybrid1.Close(); err != nil {
-			errors = append(errors, fmt.Errorf("hybrid1 session: %w", err))
-		}
-	}
-
-	// Only close primary and SAM if we created them.
-	if gi.sam != nil {
-		if gi.primary != nil {
-			if err := gi.primary.Close(); err != nil {
-				errors = append(errors, fmt.Errorf("primary session: %w", err))
-			}
-		}
-
-		if err := gi.sam.Close(); err != nil {
-			errors = append(errors, fmt.Errorf("SAM connection: %w", err))
-		}
-	}
-
-	if len(errors) > 0 {
-		return fmt.Errorf("hybrid1 integration close: %v", errors)
-	}
-	return nil
+	return hybridcommon.CloseManagedResources("hybrid1 integration", "hybrid1 session", gi.hybrid1, gi.primary, gi.sam)
 }
 
 // Session returns the underlying hybrid1 session.
