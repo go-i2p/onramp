@@ -18,6 +18,7 @@ import (
 
 	"github.com/go-i2p/go-sam-bridge/lib/embedding"
 	sam3 "github.com/go-i2p/go-sam-go"
+	"github.com/go-i2p/go-sam-go/common"
 	"github.com/go-i2p/go-sam-go/primary"
 	"github.com/go-i2p/i2pkeys"
 	"github.com/go-i2p/logger"
@@ -48,8 +49,28 @@ type Garlic struct {
 	name        string
 	addr        string
 	opts        []string
+	samUser     string
+	samPassword string
 	AddrMode    int
 	TorrentMode bool
+}
+
+var (
+	newSAMSession         = sam3.NewSAM
+	newSAMSessionWithAuth = func(address, user, password string) (*sam3.SAM, error) {
+		commonSAM, err := common.NewSAMWithAuth(address, user, password)
+		if err != nil {
+			return nil, err
+		}
+		return &sam3.SAM{SAM: commonSAM}, nil
+	}
+)
+
+func createSAMSession(address, user, password string) (*sam3.SAM, error) {
+	if user != "" || password != "" {
+		return newSAMSessionWithAuth(address, user, password)
+	}
+	return newSAMSession(address)
 }
 
 // Hybrid mode constants for selecting datagram protocol version.
@@ -170,7 +191,7 @@ func (g *Garlic) samSession() (*sam3.SAM, error) {
 	if g.SAM == nil {
 		log.WithField("address", g.getAddr()).Debug("Creating new SAM session")
 		var err error
-		g.SAM, err = sam3.NewSAM(g.getAddr())
+		g.SAM, err = createSAMSession(g.getAddr(), g.samUser, g.samPassword)
 		if err != nil {
 			log.WithError(err).Error("Failed to create SAM session")
 			return nil, fmt.Errorf("onramp samSession: %v", err)
@@ -910,7 +931,7 @@ func (g *Garlic) Keys() (*i2pkeys.I2PKeys, error) {
 		"address": g.getAddr(),
 	}).Debug("Retrieving I2P keys")
 
-	keys, err := I2PKeys(g.getName(), g.getAddr())
+	keys, err := i2pKeys(g.getName(), g.getAddr(), g.samUser, g.samPassword)
 	if err != nil {
 		log.WithError(err).Error("Failed to get I2P keys")
 		return &i2pkeys.I2PKeys{}, fmt.Errorf("onramp Keys: %v", err)
@@ -949,33 +970,20 @@ func (g *Garlic) Primary() (*primary.PrimarySession, error) {
 	return g.setupPrimarySession()
 }
 
-// NewGarlic returns a new Garlic struct. It is immediately ready to use with
-// I2P streaming using SAMv3.3 PRIMARY sessions.
-//
-// Design Decision: PRIMARY sessions are created lazily on first use of
-// ListenStream(), Dial(), or ListenPacket() rather than eagerly in the constructor.
-// This ensures:
-// - Fast initialization (2-5 minutes saved on startup)
-// - PRIMARY sessions are only created when actually needed
-// - Applications can set up multiple Garlic instances without waiting
-//
-// PRIMARY session creation takes 2-5 minutes for I2P tunnel establishment.
-// Subsequent subsession creation is nearly instant once PRIMARY tunnels exist.
-//
-// Automatic cleanup is enabled by default to ensure SAM sessions are properly
-// closed even if Close() is not called (e.g., on program crash or signal termination).
-// The cleanup is triggered by SIGINT, SIGTERM, SIGHUP signals and runtime finalizers.
-func NewGarlic(tunName, samAddr string, options []string) (*Garlic, error) {
+func newGarlic(tunName, samAddr, user, password string, options []string) (*Garlic, error) {
 	log.WithFields(logger.Fields{
 		"tunnel_name": tunName,
 		"sam_address": samAddr,
 		"options":     options,
+		"sam_user":    user != "",
 	}).Debug("Creating new Garlic instance")
 
 	g := new(Garlic)
 	g.name = tunName
 	g.addr = samAddr
 	g.opts = options
+	g.samUser = user
+	g.samPassword = password
 	g.addr = samAddr
 	var err error
 	g.Bridge, err = g.newEmbeddedSAMBridge()
@@ -1012,6 +1020,32 @@ func NewGarlic(tunName, samAddr string, options []string) (*Garlic, error) {
 	return g, nil
 }
 
+// NewGarlic returns a new Garlic struct. It is immediately ready to use with
+// I2P streaming using SAMv3.3 PRIMARY sessions.
+//
+// Design Decision: PRIMARY sessions are created lazily on first use of
+// ListenStream(), Dial(), or ListenPacket() rather than eagerly in the constructor.
+// This ensures:
+// - Fast initialization (2-5 minutes saved on startup)
+// - PRIMARY sessions are only created when actually needed
+// - Applications can set up multiple Garlic instances without waiting
+//
+// PRIMARY session creation takes 2-5 minutes for I2P tunnel establishment.
+// Subsequent subsession creation is nearly instant once PRIMARY tunnels exist.
+//
+// Automatic cleanup is enabled by default to ensure SAM sessions are properly
+// closed even if Close() is not called (e.g., on program crash or signal termination).
+// The cleanup is triggered by SIGINT, SIGTERM, SIGHUP signals and runtime finalizers.
+func NewGarlic(tunName, samAddr string, options []string) (*Garlic, error) {
+	return newGarlic(tunName, samAddr, "", "", options)
+}
+
+// NewGarlicWithAuth returns a new Garlic struct configured to authenticate to
+// a SAM bridge using SAM v3.2+ USER/PASSWORD HELLO parameters.
+func NewGarlicWithAuth(tunName, samAddr, user, password string, options []string) (*Garlic, error) {
+	return newGarlic(tunName, samAddr, user, password, options)
+}
+
 // DeleteGarlicKeys deletes the key file at the given path as determined by
 // keystore + tunName.
 // This is permanent and irreversible, and will change the onion service
@@ -1023,6 +1057,10 @@ func DeleteGarlicKeys(tunName string) error {
 // I2PKeys returns the I2PKeys at the keystore directory for the given
 // tunnel name. If none exist, they are created and stored.
 func I2PKeys(tunName, samAddr string) (i2pkeys.I2PKeys, error) {
+	return i2pKeys(tunName, samAddr, "", "")
+}
+
+func i2pKeys(tunName, samAddr, user, password string) (i2pkeys.I2PKeys, error) {
 	log.WithFields(logger.Fields{
 		"tunnel_name": tunName,
 		"sam_address": samAddr,
@@ -1051,7 +1089,7 @@ func I2PKeys(tunName, samAddr string) (i2pkeys.I2PKeys, error) {
 
 	if needNewKeys {
 		log.WithField("path", keyspath).Debug("Keys not found or empty, generating new keys")
-		sam, err := sam3.NewSAM(samAddr)
+		sam, err := createSAMSession(samAddr, user, password)
 		if err != nil {
 			log.WithError(err).Error("Failed to create SAM connection")
 			return i2pkeys.I2PKeys{}, fmt.Errorf("onramp I2PKeys: SAM error %v", err)

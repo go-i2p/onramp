@@ -118,6 +118,28 @@ client := &http.Client{Transport: transport}
 
 Plain `Dial()` and `DialContext()` continue to use the default behavior (`FROM_PORT=0`, `TO_PORT=0`).
 
+#### SAM Bridge Authentication
+
+If your SAM bridge requires SAM v3.2+ `USER` / `PASSWORD` authentication, use
+`NewGarlicWithAuth()` instead of `NewGarlic()`.
+
+```go
+garlic, err := onramp.NewGarlicWithAuth(
+	"my-app",
+	onramp.SAM_ADDR,
+	"sam-user",
+	"sam-password",
+	onramp.OPT_DEFAULTS,
+)
+if err != nil {
+	log.Fatal(err)
+}
+defer garlic.Close()
+```
+
+Authenticated Garlic instances use the supplied credentials for both the SAM
+bridge handshake and any key generation needed during session setup.
+
 ### Tor(Onion) Usage:
 
 When using it to manage a Tor session, set up an `onramp.Onion`
