@@ -61,46 +61,51 @@ var ONION_KEYSTORE_PATH string
 // Assign before concurrent use; the accessor functions are goroutine-safe.
 var TLS_KEYSTORE_PATH string
 
+// ensureKeystorePath initializes and verifies a keystore directory path.
+func ensureKeystorePath(currentPath *string, defaultDir, label string) (string, error) {
+	if *currentPath == "" {
+		log.WithField("label", label).Debug("Keystore path is empty, attempting to reinitialize")
+		path, err := GetJoinedWD(defaultDir)
+		if err != nil {
+			log.WithError(err).WithField("label", label).Error("Failed to reinitialize keystore path")
+			return "", fmt.Errorf("%s keystore path is empty and reinitialization failed: %w", label, err)
+		}
+		*currentPath = path
+	}
+	log.WithField("path", *currentPath).Debug("Checking keystore path")
+	if err := os.MkdirAll(*currentPath, 0o755); err != nil {
+		log.WithError(err).WithField("path", *currentPath).Error("Failed to create keystore directory")
+		return "", err
+	}
+	log.WithField("path", *currentPath).Debug("Keystore path verified")
+	return *currentPath, nil
+}
+
+// deleteKeystorePath removes a keystore directory tree.
+func deleteKeystorePath(path, label string) error {
+	log.WithField("path", path).Debug("Attempting to delete keystore")
+	if err := os.RemoveAll(path); err != nil {
+		log.WithError(err).WithField("path", path).Error("Failed to delete keystore")
+		return err
+	}
+	log.WithField("path", path).Debug("Successfully deleted keystore")
+	return nil
+}
+
 // I2PKeystorePath returns the path to the I2P Keystore. If the
 // path is not set, it returns the default path. If the path does
 // not exist, it creates it.
 func I2PKeystorePath() (string, error) {
 	keystoreMu.Lock()
 	defer keystoreMu.Unlock()
-	if I2P_KEYSTORE_PATH == "" {
-		log.Debug("I2P keystore path is empty, attempting to reinitialize")
-		path, err := GetJoinedWD("i2pkeys")
-		if err != nil {
-			log.WithError(err).Error("Failed to reinitialize I2P keystore path")
-			return "", fmt.Errorf("I2P keystore path is empty and reinitialization failed: %w", err)
-		}
-		I2P_KEYSTORE_PATH = path
-	}
-	log.WithField("path", I2P_KEYSTORE_PATH).Debug("Checking I2P keystore path")
-	if _, err := os.Stat(I2P_KEYSTORE_PATH); err != nil {
-		log.WithField("path", I2P_KEYSTORE_PATH).Debug("I2P keystore directory does not exist, creating")
-		err := os.MkdirAll(I2P_KEYSTORE_PATH, 0o755)
-		if err != nil {
-			log.WithError(err).WithField("path", I2P_KEYSTORE_PATH).Error("Failed to create I2P keystore directory")
-			return "", err
-		}
-	}
-	log.WithField("path", I2P_KEYSTORE_PATH).Debug("I2P keystore path verified")
-	return I2P_KEYSTORE_PATH, nil
+	return ensureKeystorePath(&I2P_KEYSTORE_PATH, "i2pkeys", "I2P")
 }
 
 // DeleteI2PKeyStore deletes the I2P Keystore.
 func DeleteI2PKeyStore() error {
 	keystoreMu.Lock()
 	defer keystoreMu.Unlock()
-	log.WithField("path", I2P_KEYSTORE_PATH).Debug("Attempting to delete I2P keystore")
-	err := os.RemoveAll(I2P_KEYSTORE_PATH)
-	if err != nil {
-		log.WithError(err).WithField("path", I2P_KEYSTORE_PATH).Error("Failed to delete I2P keystore")
-		return err
-	}
-	log.WithField("path", I2P_KEYSTORE_PATH).Debug("Successfully deleted I2P keystore")
-	return nil
+	return deleteKeystorePath(I2P_KEYSTORE_PATH, "I2P")
 	// return os.RemoveAll(I2P_KEYSTORE_PATH)
 }
 
@@ -110,40 +115,14 @@ func DeleteI2PKeyStore() error {
 func TorKeystorePath() (string, error) {
 	keystoreMu.Lock()
 	defer keystoreMu.Unlock()
-	if ONION_KEYSTORE_PATH == "" {
-		log.Debug("Tor keystore path is empty, attempting to reinitialize")
-		path, err := GetJoinedWD("onionkeys")
-		if err != nil {
-			log.WithError(err).Error("Failed to reinitialize Tor keystore path")
-			return "", fmt.Errorf("Tor keystore path is empty and reinitialization failed: %w", err)
-		}
-		ONION_KEYSTORE_PATH = path
-	}
-	log.WithField("path", ONION_KEYSTORE_PATH).Debug("Checking Tor keystore path")
-	if _, err := os.Stat(ONION_KEYSTORE_PATH); err != nil {
-		log.WithField("path", ONION_KEYSTORE_PATH).Debug("Tor keystore directory does not exist, creating")
-		err := os.MkdirAll(ONION_KEYSTORE_PATH, 0o755)
-		if err != nil {
-			log.WithError(err).WithField("path", ONION_KEYSTORE_PATH).Error("Failed to create Tor keystore directory")
-			return "", err
-		}
-	}
-	log.WithField("path", ONION_KEYSTORE_PATH).Debug("Tor keystore path verified")
-	return ONION_KEYSTORE_PATH, nil
+	return ensureKeystorePath(&ONION_KEYSTORE_PATH, "onionkeys", "Tor")
 }
 
 // DeleteTorKeyStore deletes the Onion Keystore.
 func DeleteTorKeyStore() error {
 	keystoreMu.Lock()
 	defer keystoreMu.Unlock()
-	log.WithField("path", ONION_KEYSTORE_PATH).Debug("Attempting to delete Tor keystore")
-	err := os.RemoveAll(ONION_KEYSTORE_PATH)
-	if err != nil {
-		log.WithError(err).WithField("path", ONION_KEYSTORE_PATH).Error("Failed to delete Tor keystore")
-		return err
-	}
-	log.WithField("path", ONION_KEYSTORE_PATH).Debug("Successfully deleted Tor keystore")
-	return nil
+	return deleteKeystorePath(ONION_KEYSTORE_PATH, "Tor")
 	// return os.RemoveAll(ONION_KEYSTORE_PATH)
 }
 
@@ -153,40 +132,14 @@ func DeleteTorKeyStore() error {
 func TLSKeystorePath() (string, error) {
 	keystoreMu.Lock()
 	defer keystoreMu.Unlock()
-	if TLS_KEYSTORE_PATH == "" {
-		log.Debug("TLS keystore path is empty, attempting to reinitialize")
-		path, err := GetJoinedWD("tlskeys")
-		if err != nil {
-			log.WithError(err).Error("Failed to reinitialize TLS keystore path")
-			return "", fmt.Errorf("TLS keystore path is empty and reinitialization failed: %w", err)
-		}
-		TLS_KEYSTORE_PATH = path
-	}
-	log.WithField("path", TLS_KEYSTORE_PATH).Debug("Checking TLS keystore path")
-	if _, err := os.Stat(TLS_KEYSTORE_PATH); err != nil {
-		log.WithField("path", TLS_KEYSTORE_PATH).Debug("TLS keystore directory does not exist, creating")
-		err := os.MkdirAll(TLS_KEYSTORE_PATH, 0o755)
-		if err != nil {
-			log.WithError(err).WithField("path", TLS_KEYSTORE_PATH).Error("Failed to create TLS keystore directory")
-			return "", err
-		}
-	}
-	log.WithField("path", TLS_KEYSTORE_PATH).Debug("TLS keystore path verified")
-	return TLS_KEYSTORE_PATH, nil
+	return ensureKeystorePath(&TLS_KEYSTORE_PATH, "tlskeys", "TLS")
 }
 
 // DeleteTLSKeyStore deletes the TLS Keystore.
 func DeleteTLSKeyStore() error {
 	keystoreMu.Lock()
 	defer keystoreMu.Unlock()
-	log.WithField("path", TLS_KEYSTORE_PATH).Debug("Attempting to delete TLS keystore")
-	err := os.RemoveAll(TLS_KEYSTORE_PATH)
-	if err != nil {
-		log.WithError(err).WithField("path", TLS_KEYSTORE_PATH).Error("Failed to delete TLS keystore")
-		return err
-	}
-	log.WithField("path", TLS_KEYSTORE_PATH).Debug("Successfully deleted TLS keystore")
-	return nil
+	return deleteKeystorePath(TLS_KEYSTORE_PATH, "TLS")
 	// return os.RemoveAll(TLS_KEYSTORE_PATH)
 }
 
