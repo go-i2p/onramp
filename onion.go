@@ -125,6 +125,24 @@ func (o *Onion) getName() string {
 	return o.name
 }
 
+// listenBase creates the underlying Tor listener used by Onion listen methods.
+func (o *Onion) listenBase() (net.Listener, error) {
+	t, err := o.getTor()
+	if err != nil {
+		return nil, err
+	}
+	listenConf, err := o.getListenConf()
+	if err != nil {
+		return nil, err
+	}
+	listener, err := t.Listen(o.getContext(), listenConf)
+	if err != nil {
+		log.WithError(err).Error("Failed to create Tor listener")
+		return nil, err
+	}
+	return listener, nil
+}
+
 // NewListener returns a net.Listener which will listen on an onion
 // address, and will automatically generate a keypair and store it.
 // the args are always ignored
@@ -156,18 +174,8 @@ func (o *Onion) Listen(args ...string) (net.Listener, error) {
 // the args are always ignored
 func (o *Onion) OldListen(args ...string) (net.Listener, error) {
 	log.WithField("name", o.getName()).Debug("Creating Tor listener")
-
-	t, err := o.getTor()
+	listener, err := o.listenBase()
 	if err != nil {
-		return nil, err
-	}
-	listenConf, err := o.getListenConf()
-	if err != nil {
-		return nil, err
-	}
-	listener, err := t.Listen(o.getContext(), listenConf)
-	if err != nil {
-		log.WithError(err).Error("Failed to create Tor listener")
 		return nil, err
 	}
 
@@ -186,15 +194,7 @@ func (o *Onion) ListenTLS(args ...string) (net.Listener, error) {
 		return nil, fmt.Errorf("onramp ListenTLS: %v", err)
 	}
 	log.Debug("Creating base Tor listener")
-	t, err := o.getTor()
-	if err != nil {
-		return nil, err
-	}
-	listenConf, err := o.getListenConf()
-	if err != nil {
-		return nil, err
-	}
-	l, err := t.Listen(o.getContext(), listenConf)
+	l, err := o.listenBase()
 	if err != nil {
 		log.WithError(err).Error("Failed to create base Tor listener")
 		return nil, err

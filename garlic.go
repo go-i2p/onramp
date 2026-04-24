@@ -432,6 +432,30 @@ func (g *Garlic) setupHybrid1Session() (*hybrid1.Hybrid1Session, error) {
 	return g.hybrid1Sub, nil
 }
 
+// ensureSAMSession initializes the Garlic SAM connection for a public method.
+func (g *Garlic) ensureSAMSession(method, failureMessage string) error {
+	var err error
+	if g.SAM, err = g.samSession(); err != nil {
+		log.WithError(err).Error(failureMessage)
+		return fmt.Errorf("onramp %s: %v", method, err)
+	}
+	return nil
+}
+
+// listenPacketConn initializes a packet-oriented Garlic session and returns its PacketConn.
+func (g *Garlic) listenPacketConn(method, failureMessage, successMessage string, setup func() (net.PacketConn, error)) (net.PacketConn, error) {
+	if err := g.ensureSAMSession(method, "Failed to create SAM session for "+failureMessage); err != nil {
+		return nil, err
+	}
+	conn, err := setup()
+	if err != nil {
+		log.WithError(err).Error(failureMessage)
+		return nil, fmt.Errorf("onramp %s: %v", method, err)
+	}
+	log.Debug(successMessage)
+	return conn, nil
+}
+
 // NewListener returns a net.Listener for the Garlic structure's I2P keys.
 // accepts a variable list of arguments, arguments after the first one are ignored.
 func (g *Garlic) NewListener(n, addr string) (net.Listener, error) {
@@ -504,15 +528,12 @@ func (g *Garlic) OldListen(args ...string) (net.Listener, error) {
 // reducing resource overhead significantly.
 func (g *Garlic) ListenStream() (net.Listener, error) {
 	log.Debug("Setting up stream listener")
-	var err error
-
-	// Initialize SAM connection
-	if g.SAM, err = g.samSession(); err != nil {
-		log.WithError(err).Error("Failed to create SAM session for stream listener")
-		return nil, fmt.Errorf("onramp ListenStream: %v", err)
+	if err := g.ensureSAMSession("ListenStream", "Failed to create SAM session for stream listener"); err != nil {
+		return nil, err
 	}
 
 	// Setup stream subsession (which ensures PRIMARY session exists)
+	var err error
 	if g.streamSub, err = g.setupStreamSubSession(); err != nil {
 		log.WithError(err).Error("Failed to setup stream subsession")
 		return nil, fmt.Errorf("onramp ListenStream: %v", err)
@@ -537,23 +558,19 @@ func (g *Garlic) ListenStream() (net.Listener, error) {
 // address resolution capabilities.
 func (g *Garlic) ListenPacket() (net.PacketConn, error) {
 	log.Debug("Setting up packet connection")
-	var err error
-
-	// Initialize SAM connection
-	if g.SAM, err = g.samSession(); err != nil {
-		log.WithError(err).Error("Failed to create SAM session for packet connection")
-		return nil, fmt.Errorf("onramp ListenPacket: %v", err)
-	}
-
-	// Setup hybrid2 session (which ensures PRIMARY session exists)
-	if g.hybrid2Sub, err = g.setupHybrid2Session(); err != nil {
-		log.WithError(err).Error("Failed to setup hybrid2 session")
-		return nil, fmt.Errorf("onramp ListenPacket: %v", err)
-	}
-
-	log.Debug("Packet connection successfully established")
-	// Return hybrid2 PacketConn which multiplexes datagram2/datagram3
-	return g.hybrid2Sub.PacketConn(), nil
+	return g.listenPacketConn(
+		"ListenPacket",
+		"Failed to setup hybrid2 session",
+		"Packet connection successfully established",
+		func() (net.PacketConn, error) {
+			var err error
+			g.hybrid2Sub, err = g.setupHybrid2Session()
+			if err != nil {
+				return nil, err
+			}
+			return g.hybrid2Sub.PacketConn(), nil
+		},
+	)
 }
 
 // ListenPacketWithMode returns a net.PacketConn using the specified hybrid mode.
@@ -598,22 +615,19 @@ func (g *Garlic) ListenPacketWithMode(mode int) (net.PacketConn, error) {
 // which use the more efficient Hybrid2 protocol.
 func (g *Garlic) ListenPacketHybrid1() (net.PacketConn, error) {
 	log.Debug("Setting up Hybrid1 packet connection (i2pd-compatible)")
-	var err error
-
-	// Initialize SAM connection
-	if g.SAM, err = g.samSession(); err != nil {
-		log.WithError(err).Error("Failed to create SAM session for Hybrid1 connection")
-		return nil, fmt.Errorf("onramp ListenPacketHybrid1: %v", err)
-	}
-
-	// Setup hybrid1 session (which ensures PRIMARY session exists)
-	if g.hybrid1Sub, err = g.setupHybrid1Session(); err != nil {
-		log.WithError(err).Error("Failed to setup hybrid1 session")
-		return nil, fmt.Errorf("onramp ListenPacketHybrid1: %v", err)
-	}
-
-	log.Debug("Hybrid1 packet connection successfully established")
-	return g.hybrid1Sub.PacketConn(), nil
+	return g.listenPacketConn(
+		"ListenPacketHybrid1",
+		"Failed to setup hybrid1 session",
+		"Hybrid1 packet connection successfully established",
+		func() (net.PacketConn, error) {
+			var err error
+			g.hybrid1Sub, err = g.setupHybrid1Session()
+			if err != nil {
+				return nil, err
+			}
+			return g.hybrid1Sub.PacketConn(), nil
+		},
+	)
 }
 
 // ListenPacketHybrid2 returns a net.PacketConn using the Hybrid2 protocol.
