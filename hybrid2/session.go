@@ -10,6 +10,7 @@ import (
 	"github.com/go-i2p/go-sam-go/common"
 	"github.com/go-i2p/go-sam-go/primary"
 	"github.com/go-i2p/i2pkeys"
+	"github.com/go-i2p/onramp/internal/hybridcommon"
 )
 
 // SessionOption is a function that configures a HybridSession.
@@ -106,23 +107,18 @@ func NewHybridSession(primarySession *primary.PrimarySession, id string, opts ..
 //	}
 //	defer hybrid.Close()
 func NewHybridSessionFromSAM(sam *common.SAM, id string, keys i2pkeys.I2PKeys, opts ...SessionOption) (*HybridSession, error) {
-	// Create primary session
-	primarySession, err := primary.NewPrimarySession(sam, id, keys, nil)
-	if err != nil {
-		return nil, fmt.Errorf("creating primary session: %w", err)
-	}
-
-	// Create hybrid session using the primary
-	session, err := NewHybridSession(primarySession, id+"-hybrid", opts...)
-	if err != nil {
-		primarySession.Close()
-		return nil, err
-	}
-
-	// Store SAM reference
-	session.sam = sam
-
-	return session, nil
+	return hybridcommon.NewSessionFromSAM(
+		sam,
+		id,
+		keys,
+		"hybrid2",
+		func(primarySession *primary.PrimarySession) (*HybridSession, error) {
+			return NewHybridSession(primarySession, id+"-hybrid", opts...)
+		},
+		func(session *HybridSession) {
+			session.sam = sam
+		},
+	)
 }
 
 // closeSubsessions closes both datagram subsessions.
@@ -149,14 +145,21 @@ func (h *HybridSession) ackCleanupLoop() {
 	}
 }
 
-// cleanupStaleUnacked scans all sender states and cleans up stale unacked messages.
-func (h *HybridSession) cleanupStaleUnacked() {
+// snapshotSenderStates returns a copy of sender state pointers under read lock.
+func (h *HybridSession) snapshotSenderStates() []*SenderState {
 	h.senderMu.RLock()
+	defer h.senderMu.RUnlock()
+
 	states := make([]*SenderState, 0, len(h.senderStates))
 	for _, state := range h.senderStates {
 		states = append(states, state)
 	}
-	h.senderMu.RUnlock()
+	return states
+}
+
+// cleanupStaleUnacked scans all sender states and cleans up stale unacked messages.
+func (h *HybridSession) cleanupStaleUnacked() {
+	states := h.snapshotSenderStates()
 
 	// Clean each state
 	for _, state := range states {
@@ -269,12 +272,7 @@ func (h *HybridSession) GetPathStats(dest i2pkeys.I2PAddr) *PathStats {
 // GetAllPathStats returns path statistics for all known destinations.
 // Useful for monitoring overall mesh network quality.
 func (h *HybridSession) GetAllPathStats() []*PathStats {
-	h.senderMu.RLock()
-	states := make([]*SenderState, 0, len(h.senderStates))
-	for _, state := range h.senderStates {
-		states = append(states, state)
-	}
-	h.senderMu.RUnlock()
+	states := h.snapshotSenderStates()
 
 	result := make([]*PathStats, 0, len(states))
 	for _, state := range states {

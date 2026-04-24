@@ -154,18 +154,14 @@ func (o *Onion) NewListener(n, addr string) (net.Listener, error) {
 // address, and will automatically generate a keypair and store it.
 // the args are always ignored
 func (o *Onion) Listen(args ...string) (net.Listener, error) {
-	log.WithFields(logger.Fields{
-		"args": args,
-		"name": o.getName(),
-	}).Debug("Setting up Onion listener")
-	listener, err := o.OldListen(args...)
-	if err != nil {
-		log.WithError(err).Error("Failed to create Onion listener")
-		return nil, err
-	}
-
-	log.Debug("Successfully created Onion listener")
-	return listener, nil
+	return setupNamedListener(
+		args,
+		o.getName(),
+		"Setting up Onion listener",
+		"Failed to create Onion listener",
+		"Successfully created Onion listener",
+		o.OldListen,
+	)
 	// return o.OldListen(args...)
 }
 
@@ -419,24 +415,24 @@ func ListenOnion(network, keys string) (net.Listener, error) {
 		"keys":    keys,
 	}).Debug("Creating new Onion listener")
 
-	g, err := NewOnion(keys)
-	if err != nil {
-		log.WithError(err).Error("Failed to create new Onion")
-		return nil, fmt.Errorf("onramp Listen: %v", err)
-	}
-	onionsMu.Lock()
-	onions[keys] = g
-	onionsMu.Unlock()
-	log.Debug("Onion service registered, creating listener")
-
-	listener, err := g.Listen()
-	if err != nil {
-		log.WithError(err).Error("Failed to create Onion listener")
-		return nil, err
-	}
-
-	log.Debug("Successfully created Onion listener")
-	return listener, nil
+	return createAndRegisterListener(
+		func() (*Onion, error) {
+			return NewOnion(keys)
+		},
+		func(instance *Onion) {
+			onionsMu.Lock()
+			onions[keys] = instance
+			onionsMu.Unlock()
+		},
+		func(instance *Onion) (net.Listener, error) {
+			return instance.Listen()
+		},
+		"Failed to create new Onion",
+		"onramp Listen: %v",
+		"Failed to create Onion listener",
+		"Onion service registered, creating listener",
+		"Successfully created Onion listener",
+	)
 }
 
 // DialOnion returns a net.Conn for a onion structure's keys
@@ -462,19 +458,6 @@ func DialOnion(network, addr string) (net.Conn, error) {
 // DeleteOnionKeys deletes the key file at the given path as determined by
 // keystore + tunName.
 func DeleteOnionKeys(tunName string) error {
-	log.WithField("tunnel_name", tunName).Debug("Attempting to delete Onion keys")
-
-	keystore, err := TorKeystorePath()
-	if err != nil {
-		log.WithError(err).Error("Failed to get keystore path")
-		return fmt.Errorf("onramp DeleteOnionKeys: discovery error %v", err)
-	}
 	// Use .tor.private extension to match TorKeys() which creates the key files
-	keyspath := filepath.Join(keystore, tunName+".tor.private")
-	if err := os.Remove(keyspath); err != nil {
-		log.WithError(err).WithField("path", keyspath).Error("Failed to delete key file")
-		return fmt.Errorf("onramp DeleteOnionKeys: %v", err)
-	}
-	log.Debug("Successfully deleted Onion keys")
-	return nil
+	return deleteKeyFile(tunName, "Onion", ".tor.private", TorKeystorePath, "onramp DeleteOnionKeys")
 }

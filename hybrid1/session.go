@@ -8,6 +8,7 @@ import (
 	"github.com/go-i2p/go-sam-go/common"
 	"github.com/go-i2p/go-sam-go/primary"
 	"github.com/go-i2p/i2pkeys"
+	"github.com/go-i2p/onramp/internal/hybridcommon"
 )
 
 // SessionOption is a function that configures a Hybrid1Session.
@@ -80,20 +81,16 @@ func NewHybrid1Session(primarySession *primary.PrimarySession, id string, opts .
 
 // NewHybrid1SessionFromSAM creates a new Hybrid1Session with a fresh PrimarySession.
 func NewHybrid1SessionFromSAM(sam *common.SAM, id string, keys i2pkeys.I2PKeys, opts ...SessionOption) (*Hybrid1Session, error) {
-	// Create primary session.
-	primarySession, err := primary.NewPrimarySession(sam, id, keys, nil)
-	if err != nil {
-		return nil, fmt.Errorf("hybrid1: creating primary session: %w", err)
-	}
-
-	// Create hybrid1 session using the primary.
-	session, err := NewHybrid1Session(primarySession, id+"-hybrid1", opts...)
-	if err != nil {
-		primarySession.Close()
-		return nil, err
-	}
-
-	return session, nil
+	return hybridcommon.NewSessionFromSAM(
+		sam,
+		id,
+		keys,
+		"hybrid1",
+		func(primarySession *primary.PrimarySession) (*Hybrid1Session, error) {
+			return NewHybrid1Session(primarySession, id+"-hybrid1", opts...)
+		},
+		nil,
+	)
 }
 
 // receiveLoop continuously reads datagrams and processes them.
@@ -281,30 +278,12 @@ func (h *Hybrid1Session) WaitForClose() {
 // getSenderState retrieves or creates sender state for a destination.
 func (h *Hybrid1Session) getSenderState(dest i2pkeys.I2PAddr) *SenderState {
 	key := dest.Base64()
-
-	// Fast path.
-	h.senderMu.RLock()
-	state, exists := h.senderStates[key]
-	h.senderMu.RUnlock()
-
-	if exists {
-		return state
-	}
-
-	// Slow path.
-	h.senderMu.Lock()
-	defer h.senderMu.Unlock()
-
-	if state, exists = h.senderStates[key]; exists {
-		return state
-	}
-
-	state = &SenderState{
-		Destination: dest,
-		Counter:     0,
-	}
-	h.senderStates[key] = state
-	return state
+	return hybridcommon.GetOrCreateMapValue(&h.senderMu, h.senderStates, key, func() *SenderState {
+		return &SenderState{
+			Destination: dest,
+			Counter:     0,
+		}
+	})
 }
 
 // SenderStateCount returns the number of destination states being tracked.

@@ -143,6 +143,98 @@ func DeleteTLSKeyStore() error {
 	// return os.RemoveAll(TLS_KEYSTORE_PATH)
 }
 
+// parseURLHostname parses a URL-like string and returns its hostname.
+func parseURLHostname(value, valueLabel string) (string, error) {
+	parsedURL, err := url.Parse(value)
+	if err != nil {
+		log.WithError(err).WithField(valueLabel, value).Error("Failed to parse URL")
+		return "", err
+	}
+	return parsedURL.Hostname(), nil
+}
+
+// isI2PHostname reports whether a hostname is an I2P destination.
+func isI2PHostname(hostname string) bool {
+	return strings.HasSuffix(hostname, ".i2p")
+}
+
+// routeByHostname dispatches a connection/listener request based on I2P hostname suffix.
+func routeByHostname[T any](network, target, hostname, i2pLog, torLog string, i2pFn, torFn func(string, string) (T, error)) (T, error) {
+	if isI2PHostname(hostname) {
+		log.WithField("hostname", hostname).Debug(i2pLog)
+		return i2pFn(network, target)
+	}
+	log.WithField("hostname", hostname).Debug(torLog)
+	return torFn(network, target)
+}
+
+// setupNamedListener logs and creates a listener using the provided constructor.
+func setupNamedListener(args []string, name string, setupLog, failLog, successLog string, constructor func(...string) (net.Listener, error)) (net.Listener, error) {
+	log.WithFields(logger.Fields{
+		"args": args,
+		"name": name,
+	}).Debug(setupLog)
+
+	listener, err := constructor(args...)
+	if err != nil {
+		log.WithError(err).Error(failLog)
+		return nil, err
+	}
+
+	log.Debug(successLog)
+	return listener, nil
+}
+
+// createAndRegisterListener creates an instance, registers it, and opens a listener.
+func createAndRegisterListener[T any](
+	create func() (T, error),
+	register func(T),
+	listen func(T) (net.Listener, error),
+	createFailLog string,
+	createFailErr string,
+	listenFailLog string,
+	registeredLog string,
+	successLog string,
+) (net.Listener, error) {
+	instance, err := create()
+	if err != nil {
+		log.WithError(err).Error(createFailLog)
+		return nil, fmt.Errorf(createFailErr, err)
+	}
+
+	register(instance)
+	log.Debug(registeredLog)
+
+	listener, err := listen(instance)
+	if err != nil {
+		log.WithError(err).Error(listenFailLog)
+		return nil, err
+	}
+
+	log.Debug(successLog)
+	return listener, nil
+}
+
+// deleteKeyFile removes a key file under the provided keystore and extension.
+func deleteKeyFile(tunName, keystoreLabel, fileExt string, keystoreFn func() (string, error), wrapPrefix string) error {
+	log.WithField("tunnel_name", tunName).Debug("Attempting to delete " + keystoreLabel + " keys")
+
+	keystore, err := keystoreFn()
+	if err != nil {
+		log.WithError(err).Error("Failed to get keystore path")
+		return fmt.Errorf("%s: discovery error %v", wrapPrefix, err)
+	}
+
+	keyspath := filepath.Join(keystore, tunName+fileExt)
+	if err := os.Remove(keyspath); err != nil {
+		log.WithError(err).WithField("path", keyspath).Error("Failed to delete key file")
+		return fmt.Errorf("%s: %v", wrapPrefix, err)
+	}
+
+	log.Debug("Successfully deleted " + keystoreLabel + " keys")
+	return nil
+}
+
 // Dial returns a connection for the given network and address.
 // network is ignored. If the address ends in i2p, it returns an I2P connection.
 // if the address ends in anything else, it returns a Tor connection.
@@ -152,18 +244,14 @@ func Dial(network, addr string) (net.Conn, error) {
 		"address": addr,
 	}).Debug("Attempting to dial")
 
-	url, err := url.Parse(addr)
+	hostname, err := parseURLHostname(addr, "address")
 	if err != nil {
-		log.WithError(err).WithField("address", addr).Error("Failed to parse address")
 		return nil, err
 	}
-	hostname := url.Hostname()
-	if strings.HasSuffix(hostname, ".i2p") {
-		log.WithField("hostname", hostname).Debug("Using I2P connection for .i2p address")
-		return DialGarlic(network, addr)
-	}
-	log.WithField("hostname", hostname).Debug("Using Tor connection for non-i2p address")
-	return DialOnion(network, addr)
+	return routeByHostname(network, addr, hostname,
+		"Using I2P connection for .i2p address",
+		"Using Tor connection for non-i2p address",
+		DialGarlic, DialOnion)
 }
 
 // Listen returns a listener for the given network and address.
@@ -185,19 +273,14 @@ func Listen(network, keys string) (net.Listener, error) {
 		return ListenOnion(network, keys)
 	}
 
-	url, err := url.Parse(keys)
+	hostname, err := parseURLHostname(keys, "keys")
 	if err != nil {
-		log.WithError(err).WithField("keys", keys).Error("Failed to parse keys URL")
 		return nil, err
 	}
-
-	hostname := url.Hostname()
-	if strings.HasSuffix(hostname, ".i2p") {
-		log.WithField("hostname", hostname).Debug("Creating I2P listener based on .i2p hostname")
-		return ListenGarlic(network, keys)
-	}
-	log.WithField("hostname", hostname).Debug("Creating Tor listener for non-i2p hostname")
-	return ListenOnion(network, keys)
+	return routeByHostname(network, keys, hostname,
+		"Creating I2P listener based on .i2p hostname",
+		"Creating Tor listener for non-i2p hostname",
+		ListenGarlic, ListenOnion)
 }
 
 // CloseAll closes all Garlic and Onion instances managed by the onramp package.

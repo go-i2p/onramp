@@ -68,20 +68,28 @@ func NewGarlicIntegration(samAddr, name string, opts ...GarlicOption) (*GarlicIn
 	hybridcommon.ApplyOptions(gi, opts)
 
 	var err error
-	gi.sam, gi.primary, err = hybridcommon.SetupManagedPrimary(samAddr, name, "hybrid2 integration", &gi.keys, gi.options)
+	gi.sam, gi.primary, err = hybridcommon.SetupManagedIntegration(
+		samAddr,
+		name,
+		"hybrid2 integration",
+		"hybrid session",
+		"-hybrid",
+		&gi.keys,
+		gi.options,
+		func(primarySession *primary.PrimarySession, sessionName string, options []string) error {
+			hybridOpts := []SessionOption{}
+			if options != nil {
+				hybridOpts = append(hybridOpts, WithOptions(options))
+			}
+			gi.hybrid, err = NewHybridSession(primarySession, sessionName, hybridOpts...)
+			if err != nil {
+				return err
+			}
+			return nil
+		},
+	)
 	if err != nil {
 		return nil, err
-	}
-
-	// Create hybrid session
-	hybridOpts := []SessionOption{}
-	if gi.options != nil {
-		hybridOpts = append(hybridOpts, WithOptions(gi.options))
-	}
-	gi.hybrid, err = NewHybridSession(gi.primary, name+"-hybrid", hybridOpts...)
-	if err != nil {
-		_ = hybridcommon.CloseManagedResources("hybrid2 integration", "hybrid session", nil, gi.primary, gi.sam)
-		return nil, fmt.Errorf("hybrid2 integration: creating hybrid session: %w", err)
 	}
 
 	return gi, nil

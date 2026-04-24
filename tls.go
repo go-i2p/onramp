@@ -10,6 +10,7 @@ import (
 	"encoding/asn1"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"math/big"
 	"net"
 	"os"
@@ -148,6 +149,13 @@ func createTLSCertificate(host string) error {
 	return persistTLSCRL(host, privStore, tlsCert, priv)
 }
 
+// closeWithErr closes a resource and records a close failure in retErr when needed.
+func closeWithErr(resource io.Closer, retErr *error) {
+	if err := resource.Close(); *retErr == nil {
+		*retErr = err
+	}
+}
+
 // persistTLSCertFiles writes the certificate and private key PEM files to disk.
 func persistTLSCertFiles(host, privStore string, tlsCert []byte, priv *ecdsa.PrivateKey) (retErr error) {
 	certFile := filepath.Join(privStore, host+".crt")
@@ -157,11 +165,7 @@ func persistTLSCertFiles(host, privStore string, tlsCert []byte, priv *ecdsa.Pri
 		log.WithError(err).WithField("path", certFile).Error("Failed to create certificate file")
 		return fmt.Errorf("failed to open %s for writing: %s", host+".crt", err)
 	}
-	defer func() {
-		if err := certOut.Close(); retErr == nil {
-			retErr = err
-		}
-	}()
+	defer closeWithErr(certOut, &retErr)
 	if err := pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: tlsCert}); err != nil {
 		log.WithError(err).Error("Failed to encode certificate PEM")
 		return fmt.Errorf("failed to encode certificate PEM: %w", err)
@@ -175,11 +179,7 @@ func persistTLSCertFiles(host, privStore string, tlsCert []byte, priv *ecdsa.Pri
 		log.WithError(err).WithField("path", privFile).Error("Failed to create private key file")
 		return fmt.Errorf("failed to open %s for writing: %v", privFile, err)
 	}
-	defer func() {
-		if err := keyOut.Close(); retErr == nil {
-			retErr = err
-		}
-	}()
+	defer closeWithErr(keyOut, &retErr)
 	secp384r1, err := asn1.Marshal(asn1.ObjectIdentifier{1, 3, 132, 0, 34}) // http://www.ietf.org/rfc/rfc5480.txt
 	if err != nil {
 		log.WithError(err).Error("Failed to marshal EC parameters")
@@ -215,11 +215,7 @@ func persistTLSCRL(host, privStore string, tlsCert []byte, priv *ecdsa.PrivateKe
 		log.WithError(err).WithField("path", crlFile).Error("Failed to create CRL file")
 		return fmt.Errorf("failed to open %s for writing: %s", crlFile, err)
 	}
-	defer func() {
-		if err := crlOut.Close(); retErr == nil {
-			retErr = err
-		}
-	}()
+	defer closeWithErr(crlOut, &retErr)
 	crlcert, err := x509.ParseCertificate(tlsCert)
 	if err != nil {
 		log.WithError(err).Error("Failed to parse certificate for CRL creation")

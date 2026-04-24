@@ -376,22 +376,17 @@ func (g *Garlic) setupStreamSubSessionWithPorts(fromPort, toPort int) (*primary.
 func (g *Garlic) setupHybrid2Session() (*hybrid2.HybridSession, error) {
 	if g.hybrid2Sub == nil {
 		log.WithField("name", g.getName()).Debug("Setting up hybrid2 session")
-
-		// Ensure PRIMARY session exists first
-		if _, err := g.setupPrimarySession(); err != nil {
+		err := g.setupHybridPacketSession("hybrid2 session", func(options []string) error {
+			var err error
+			g.hybrid2Sub, err = hybrid2.NewHybridSession(g.primary, g.getHybrid2ID(), hybrid2.WithOptions(options))
+			if err != nil {
+				return fmt.Errorf("onramp setupHybrid2Session: %v", err)
+			}
+			return nil
+		})
+		if err != nil {
 			return nil, err
 		}
-
-		// Create hybrid2 session with options
-		var err error
-		subOpts := append(g.getOptions(), "PORT=0")
-		g.hybrid2Sub, err = hybrid2.NewHybridSession(g.primary, g.getHybrid2ID(), hybrid2.WithOptions(subOpts))
-		if err != nil {
-			log.WithError(err).Error("Failed to create hybrid2 session")
-			return nil, fmt.Errorf("onramp setupHybrid2Session: %v", err)
-		}
-
-		log.Debug("Hybrid2 session created successfully")
 	}
 	return g.hybrid2Sub, nil
 }
@@ -399,6 +394,20 @@ func (g *Garlic) setupHybrid2Session() (*hybrid2.HybridSession, error) {
 // getHybrid1ID returns a unique ID for the hybrid1 session.
 func (g *Garlic) getHybrid1ID() string {
 	return g.getName() + "-hybrid1"
+}
+
+// setupHybridPacketSession ensures PRIMARY exists and initializes a packet session once.
+func (g *Garlic) setupHybridPacketSession(setupLabel string, setupFn func(options []string) error) error {
+	if _, err := g.setupPrimarySession(); err != nil {
+		return err
+	}
+	subOpts := append(g.getOptions(), "PORT=0")
+	if err := setupFn(subOpts); err != nil {
+		log.WithError(err).Error("Failed to create " + setupLabel)
+		return err
+	}
+	log.WithField("name", g.getName()).Debug(setupLabel + " created successfully")
+	return nil
 }
 
 // setupHybrid1Session creates or returns the hybrid1 session.
@@ -412,22 +421,17 @@ func (g *Garlic) getHybrid1ID() string {
 func (g *Garlic) setupHybrid1Session() (*hybrid1.Hybrid1Session, error) {
 	if g.hybrid1Sub == nil {
 		log.WithField("name", g.getName()).Debug("Setting up hybrid1 session")
-
-		// Ensure PRIMARY session exists first
-		if _, err := g.setupPrimarySession(); err != nil {
+		err := g.setupHybridPacketSession("hybrid1 session", func(options []string) error {
+			var err error
+			g.hybrid1Sub, err = hybrid1.NewHybrid1Session(g.primary, g.getHybrid1ID(), hybrid1.WithOptions(options))
+			if err != nil {
+				return fmt.Errorf("onramp setupHybrid1Session: %v", err)
+			}
+			return nil
+		})
+		if err != nil {
 			return nil, err
 		}
-
-		// Create hybrid1 session with options
-		var err error
-		subOpts := append(g.getOptions(), "PORT=0")
-		g.hybrid1Sub, err = hybrid1.NewHybrid1Session(g.primary, g.getHybrid1ID(), hybrid1.WithOptions(subOpts))
-		if err != nil {
-			log.WithError(err).Error("Failed to create hybrid1 session")
-			return nil, fmt.Errorf("onramp setupHybrid1Session: %v", err)
-		}
-
-		log.Debug("Hybrid1 session created successfully")
 	}
 	return g.hybrid1Sub, nil
 }
@@ -478,19 +482,14 @@ func (g *Garlic) NewListener(n, addr string) (net.Listener, error) {
 // Listen returns a net.Listener for the Garlic structure's I2P keys.
 // accepts a variable list of arguments, arguments after the first one are ignored.
 func (g *Garlic) Listen(args ...string) (net.Listener, error) {
-	log.WithFields(logger.Fields{
-		"args": args,
-		"name": g.getName(),
-	}).Debug("Setting up listener")
-
-	listener, err := g.OldListen(args...)
-	if err != nil {
-		log.WithError(err).Error("Failed to create listener")
-		return nil, err
-	}
-
-	log.Debug("Successfully created listener")
-	return listener, nil
+	return setupNamedListener(
+		args,
+		g.getName(),
+		"Setting up listener",
+		"Failed to create listener",
+		"Successfully created listener",
+		g.OldListen,
+	)
 	// return g.OldListen(args...)
 }
 
@@ -1018,20 +1017,7 @@ func NewGarlic(tunName, samAddr string, options []string) (*Garlic, error) {
 // This is permanent and irreversible, and will change the onion service
 // address.
 func DeleteGarlicKeys(tunName string) error {
-	log.WithField("tunnel_name", tunName).Debug("Attempting to delete Garlic keys")
-	keystore, err := I2PKeystorePath()
-	if err != nil {
-		log.WithError(err).Error("Failed to get keystore path")
-		return fmt.Errorf("onramp DeleteGarlicKeys: discovery error %v", err)
-	}
-	keyspath := filepath.Join(keystore, tunName+".i2p.private")
-	log.WithField("path", keyspath).Debug("Deleting key file")
-	if err := os.Remove(keyspath); err != nil {
-		log.WithError(err).WithField("path", keyspath).Error("Failed to delete key file")
-		return fmt.Errorf("onramp DeleteGarlicKeys: %v", err)
-	}
-	log.Debug("Successfully deleted Garlic keys")
-	return nil
+	return deleteKeyFile(tunName, "Garlic", ".i2p.private", I2PKeystorePath, "onramp DeleteGarlicKeys")
 }
 
 // I2PKeys returns the I2PKeys at the keystore directory for the given
@@ -1186,17 +1172,24 @@ func ListenGarlic(network, keys string) (net.Listener, error) {
 		return existing.Listen()
 	}
 
-	// Create new Garlic instance
-	g, err := NewGarlic(keys, SAM_ADDR, OPT_DEFAULTS)
-	if err != nil {
-		log.WithError(err).Error("Failed to create new Garlic")
-		return nil, fmt.Errorf("onramp Listen: %v", err)
-	}
-	garlicsMu.Lock()
-	garlics[keys] = g
-	garlicsMu.Unlock()
-	log.Debug("Successfully created Garlic listener")
-	return g.Listen()
+	return createAndRegisterListener(
+		func() (*Garlic, error) {
+			return NewGarlic(keys, SAM_ADDR, OPT_DEFAULTS)
+		},
+		func(instance *Garlic) {
+			garlicsMu.Lock()
+			garlics[keys] = instance
+			garlicsMu.Unlock()
+		},
+		func(instance *Garlic) (net.Listener, error) {
+			return instance.Listen()
+		},
+		"Failed to create new Garlic",
+		"onramp Listen: %v",
+		"Failed to create Garlic listener",
+		"Garlic service registered, creating listener",
+		"Successfully created Garlic listener",
+	)
 }
 
 // defaultDialer is the shared Garlic instance used for package-level DialGarlic calls.

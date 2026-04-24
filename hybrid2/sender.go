@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/go-i2p/i2pkeys"
+	"github.com/go-i2p/onramp/internal/hybridcommon"
 )
 
 // ACK message format markers
@@ -19,37 +20,28 @@ const (
 	// Regular data messages have no marker (backward compatible)
 )
 
+// ensureSessionOpen returns ErrSessionClosed when the session has been closed.
+func (h *HybridSession) ensureSessionOpen() error {
+	h.closeMu.RLock()
+	defer h.closeMu.RUnlock()
+	if h.closed {
+		return ErrSessionClosed
+	}
+	return nil
+}
+
 // getSenderState retrieves or creates the sender state for a specific destination.
 // The state tracks how many datagrams have been sent to this destination to determine
 // when to use datagram2 (authenticated) vs datagram3 (low-overhead).
 func (h *HybridSession) getSenderState(dest i2pkeys.I2PAddr) *SenderState {
 	key := dest.Base64()
-
-	// Fast path: check if state already exists
-	h.senderMu.RLock()
-	state, exists := h.senderStates[key]
-	h.senderMu.RUnlock()
-
-	if exists {
-		return state
-	}
-
-	// Slow path: create new state
-	h.senderMu.Lock()
-	defer h.senderMu.Unlock()
-
-	// Double-check after acquiring write lock to avoid race condition
-	if state, exists = h.senderStates[key]; exists {
-		return state
-	}
-
-	state = &SenderState{
-		Destination:      dest,
-		Counter:          0,
-		UnackedDatagrams: make(map[uint64]time.Time),
-	}
-	h.senderStates[key] = state
-	return state
+	return hybridcommon.GetOrCreateMapValue(&h.senderMu, h.senderStates, key, func() *SenderState {
+		return &SenderState{
+			Destination:      dest,
+			Counter:          0,
+			UnackedDatagrams: make(map[uint64]time.Time),
+		}
+	})
 }
 
 // shouldUseDatagram2 determines if the next message should use datagram2.
@@ -277,13 +269,9 @@ func decodeAckMessage(payload []byte) (bool, bool, uint64, []byte) {
 // This approach provides sender identification through periodic authentication
 // while minimizing overhead for bulk traffic and preventing hash mapping expiry.
 func (h *HybridSession) SendDatagram(data []byte, dest i2pkeys.I2PAddr) error {
-	// Check if session is closed
-	h.closeMu.RLock()
-	if h.closed {
-		h.closeMu.RUnlock()
-		return ErrSessionClosed
+	if err := h.ensureSessionOpen(); err != nil {
+		return err
 	}
-	h.closeMu.RUnlock()
 
 	state := h.getSenderState(dest)
 
@@ -326,13 +314,9 @@ func (h *HybridSession) SendDatagram(data []byte, dest i2pkeys.I2PAddr) error {
 //
 // After sending, the counter is reset to 1 (as if message 0 was just sent).
 func (h *HybridSession) ForceDatagram2(data []byte, dest i2pkeys.I2PAddr) error {
-	// Check if session is closed
-	h.closeMu.RLock()
-	if h.closed {
-		h.closeMu.RUnlock()
-		return ErrSessionClosed
+	if err := h.ensureSessionOpen(); err != nil {
+		return err
 	}
-	h.closeMu.RUnlock()
 
 	state := h.getSenderState(dest)
 
@@ -353,13 +337,9 @@ func (h *HybridSession) ForceDatagram2(data []byte, dest i2pkeys.I2PAddr) error 
 // sendAckResponse sends an ACK response for a received datagram2.
 // This is called internally when processing ACK requests.
 func (h *HybridSession) sendAckResponse(ackedSeqNum uint64, dest i2pkeys.I2PAddr) error {
-	// Check if session is closed
-	h.closeMu.RLock()
-	if h.closed {
-		h.closeMu.RUnlock()
-		return ErrSessionClosed
+	if err := h.ensureSessionOpen(); err != nil {
+		return err
 	}
-	h.closeMu.RUnlock()
 
 	// Encode ACK response
 	payload := encodeAckResponse(ackedSeqNum)
