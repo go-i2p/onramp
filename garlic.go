@@ -5,8 +5,10 @@ package onramp
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/tls"
 	"fmt"
+	"math/big"
 	"net"
 	"os"
 	"path/filepath"
@@ -32,10 +34,13 @@ type Garlic struct {
 	*embedding.Bridge
 	// PRIMARY session fields (SAMv3.3+)
 	// These enable efficient tunnel sharing across multiple subsessions
-	primary    *primary.PrimarySession   // Master session managing shared tunnels
-	streamSub  *primary.StreamSubSession // Stream subsession for TCP-like connections
-	hybrid2Sub *hybrid2.HybridSession    // Hybrid2 session for efficient datagram messaging
-	hybrid1Sub *hybrid1.Hybrid1Session   // Hybrid1 session for i2pd-compatible datagrams
+	primary            *primary.PrimarySession                       // Master session managing shared tunnels
+	streamSub          *primary.StreamSubSession                     // Stream subsession for TCP-like connections
+	streamSubsByPort   map[streamPortTuple]*primary.StreamSubSession // Port-specific stream subsessions keyed by FROM_PORT/TO_PORT
+	persistentFromPort int                                           // Lazily selected local virtual port reused across DialToPort calls without explicit FROM_PORT
+	streamSubsMu       sync.Mutex
+	hybrid2Sub         *hybrid2.HybridSession  // Hybrid2 session for efficient datagram messaging
+	hybrid1Sub         *hybrid1.Hybrid1Session // Hybrid1 session for i2pd-compatible datagrams
 
 	// Common fields
 	ServiceKeys *i2pkeys.I2PKeys
@@ -73,6 +78,11 @@ const (
 	DEST_BASE64           = 4
 	DEST_BASE64_BYTES     = 5
 )
+
+type streamPortTuple struct {
+	from int
+	to   int
+}
 
 func (g *Garlic) Network() string {
 	if g.streamSub != nil {
@@ -245,6 +255,113 @@ func (g *Garlic) setupStreamSubSession() (*primary.StreamSubSession, error) {
 		log.Debug("Stream subsession created successfully")
 	}
 	return g.streamSub, nil
+}
+
+func validateSAMVirtualPort(port int) error {
+	if port < 0 || port > 65535 {
+		return fmt.Errorf("must be in range 0-65535, got %d", port)
+	}
+	return nil
+}
+
+func parseI2PAddrAndVirtualPort(addr string) (string, int, error) {
+	if strings.Count(addr, ":") == 0 {
+		if !strings.Contains(addr, ".i2p") {
+			return "", 0, fmt.Errorf("address %q is not an I2P address (must contain .i2p)", addr)
+		}
+		return addr, 0, nil
+	}
+
+	host, portStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		return "", 0, fmt.Errorf("invalid address %q: expected I2P destination or destination:port", addr)
+	}
+	if !strings.Contains(host, ".i2p") {
+		return "", 0, fmt.Errorf("address %q is not an I2P address (must contain .i2p)", host)
+	}
+
+	port, err := net.LookupPort("tcp", portStr)
+	if err != nil {
+		return "", 0, fmt.Errorf("invalid destination virtual port %q: %v", portStr, err)
+	}
+	if err := validateSAMVirtualPort(port); err != nil {
+		return "", 0, fmt.Errorf("invalid destination virtual port: %w", err)
+	}
+
+	return host, port, nil
+}
+
+func randomEphemeralPort() (int, error) {
+	const minPort = 1024
+	const maxPort = 65535
+	rangeSize := maxPort - minPort + 1
+
+	n, err := rand.Int(rand.Reader, big.NewInt(int64(rangeSize)))
+	if err != nil {
+		return 0, err
+	}
+
+	return minPort + int(n.Int64()), nil
+}
+
+func (g *Garlic) getOrCreatePersistentFromPort() (int, error) {
+	g.streamSubsMu.Lock()
+	defer g.streamSubsMu.Unlock()
+
+	if g.persistentFromPort != 0 {
+		return g.persistentFromPort, nil
+	}
+
+	port, err := randomEphemeralPort()
+	if err != nil {
+		return 0, err
+	}
+
+	g.persistentFromPort = port
+	return g.persistentFromPort, nil
+}
+
+// setupStreamSubSessionWithPorts creates or returns a stream subsession scoped
+// to a specific FROM_PORT/TO_PORT tuple.
+func (g *Garlic) setupStreamSubSessionWithPorts(fromPort, toPort int) (*primary.StreamSubSession, error) {
+	if fromPort == 0 && toPort == 0 {
+		return g.setupStreamSubSession()
+	}
+
+	g.streamSubsMu.Lock()
+	defer g.streamSubsMu.Unlock()
+
+	if existing, ok := g.streamSubsByPort[streamPortTuple{from: fromPort, to: toPort}]; ok {
+		return existing, nil
+	}
+
+	log.WithFields(logger.Fields{
+		"name":      g.getName(),
+		"from_port": fromPort,
+		"to_port":   toPort,
+	}).Debug("Setting up port-specific stream subsession")
+
+	if _, err := g.setupPrimarySession(); err != nil {
+		return nil, err
+	}
+
+	subID := fmt.Sprintf("%s-stream-%d-%d", g.getName(), fromPort, toPort)
+	sub, err := g.primary.NewStreamSubSessionWithPort(subID, g.getOptions(), fromPort, toPort)
+	if err != nil {
+		log.WithError(err).WithFields(logger.Fields{
+			"subsession_id": subID,
+			"from_port":     fromPort,
+			"to_port":       toPort,
+		}).Error("Failed to create port-specific stream subsession")
+		return nil, fmt.Errorf("onramp setupStreamSubSessionWithPorts: %v", err)
+	}
+
+	if g.streamSubsByPort == nil {
+		g.streamSubsByPort = make(map[streamPortTuple]*primary.StreamSubSession)
+	}
+	g.streamSubsByPort[streamPortTuple{from: fromPort, to: toPort}] = sub
+
+	return sub, nil
 }
 
 // setupHybrid2Session creates or returns the hybrid2 session.
@@ -587,6 +704,15 @@ func (g *Garlic) Dial(net, addr string) (net.Conn, error) {
 	return g.DialContext(context.Background(), net, addr)
 }
 
+// DialToPort dials an I2P destination using virtual ports.
+//
+// The remote virtual port is parsed from addr when formatted as "destination:port".
+// The local FROM_PORT is optional; when omitted, Garlic lazily selects a random
+// local virtual port and reuses it for subsequent DialToPort calls.
+func (g *Garlic) DialToPort(network, addr string, fromPort ...int) (net.Conn, error) {
+	return g.DialContextToPort(context.Background(), network, addr, fromPort...)
+}
+
 // DialContext returns a net.Conn for the Garlic structure's I2P keys with context support.
 // This method now uses PRIMARY sessions with stream subsessions for efficient
 // tunnel sharing. The context allows cancellation and timeout control.
@@ -596,12 +722,18 @@ func (g *Garlic) DialContext(ctx context.Context, net, addr string) (net.Conn, e
 		"address": addr,
 	}).Debug("Attempting to dial with context")
 
-	if !strings.Contains(addr, ".i2p") {
+	dialAddr, toPort, err := parseI2PAddrAndVirtualPort(addr)
+	if err != nil {
 		log.WithField("address", addr).Error("Cannot dial non-I2P address with Garlic")
-		return nil, fmt.Errorf("onramp DialContext: address %q is not an I2P address (must contain .i2p)", addr)
+		return nil, fmt.Errorf("onramp DialContext: %v", err)
 	}
 
-	var err error
+	// If a virtual destination port is present in addr, route through the
+	// virtual-port aware path while preserving this method's signature.
+	if toPort != 0 {
+		return g.DialContextToPort(ctx, net, addr)
+	}
+
 	if g.SAM, err = g.samSession(); err != nil {
 		log.WithError(err).Error("Failed to create SAM session")
 		return nil, fmt.Errorf("onramp DialContext: %v", err)
@@ -614,13 +746,69 @@ func (g *Garlic) DialContext(ctx context.Context, net, addr string) (net.Conn, e
 	}
 
 	log.Debug("Attempting to establish connection with context")
-	conn, err := g.streamSub.StreamSession.DialContext(ctx, addr)
+	conn, err := g.streamSub.StreamSession.DialContext(ctx, dialAddr)
 	if err != nil {
 		log.WithError(err).Error("Failed to establish connection")
 		return nil, err
 	}
 
 	log.Debug("Successfully established connection")
+	return conn, nil
+}
+
+// DialContextToPort returns a net.Conn for an I2P destination with context support.
+//
+// The remote virtual port is parsed from addr when formatted as "destination:port".
+// An optional local FROM_PORT may be provided via fromPort. If omitted, Garlic
+// uses a persistent random local virtual port selected on first use.
+func (g *Garlic) DialContextToPort(ctx context.Context, network, addr string, fromPort ...int) (net.Conn, error) {
+	if len(fromPort) > 1 {
+		return nil, fmt.Errorf("onramp DialContextToPort: expected at most one FROM_PORT, got %d", len(fromPort))
+	}
+
+	dialAddr, toPort, err := parseI2PAddrAndVirtualPort(addr)
+	if err != nil {
+		return nil, fmt.Errorf("onramp DialContextToPort: %v", err)
+	}
+
+	selectedFromPort := 0
+	if len(fromPort) == 1 {
+		selectedFromPort = fromPort[0]
+		if err := validateSAMVirtualPort(selectedFromPort); err != nil {
+			return nil, fmt.Errorf("onramp DialContextToPort: invalid FROM_PORT: %w", err)
+		}
+	} else if toPort != 0 {
+		selectedFromPort, err = g.getOrCreatePersistentFromPort()
+		if err != nil {
+			return nil, fmt.Errorf("onramp DialContextToPort: failed to select persistent FROM_PORT: %v", err)
+		}
+	}
+
+	log.WithFields(logger.Fields{
+		"network":   network,
+		"address":   dialAddr,
+		"from_port": selectedFromPort,
+		"to_port":   toPort,
+	}).Debug("Attempting to dial with context and explicit SAM virtual ports")
+
+	if g.SAM, err = g.samSession(); err != nil {
+		log.WithError(err).Error("Failed to create SAM session")
+		return nil, fmt.Errorf("onramp DialContextToPort: %v", err)
+	}
+
+	streamSub, err := g.setupStreamSubSessionWithPorts(selectedFromPort, toPort)
+	if err != nil {
+		log.WithError(err).Error("Failed to setup port-specific stream subsession")
+		return nil, fmt.Errorf("onramp DialContextToPort: %v", err)
+	}
+
+	conn, err := streamSub.StreamSession.DialContext(ctx, dialAddr)
+	if err != nil {
+		log.WithError(err).Error("Failed to establish port-specific stream connection")
+		return nil, err
+	}
+
+	log.Debug("Successfully established port-specific stream connection")
 	return conn, nil
 }
 
@@ -682,6 +870,10 @@ func (g *Garlic) Close() error {
 	// Clear references
 	g.primary = nil
 	g.streamSub = nil
+	g.streamSubsMu.Lock()
+	g.streamSubsByPort = nil
+	g.persistentFromPort = 0
+	g.streamSubsMu.Unlock()
 	g.hybrid2Sub = nil
 	g.hybrid1Sub = nil
 

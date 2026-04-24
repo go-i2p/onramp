@@ -83,6 +83,41 @@ signals, or failing to call `Close()`). This is enabled by default.
 
 If you need to disable automatic cleanup for a specific instance, use `DisableAutoCleanup(garlic)`.
 
+#### Virtual Port Dialing (`FROM_PORT` / `TO_PORT`)
+
+`Garlic` supports SAM virtual ports for stream dialing. Use these when one I2P
+destination multiplexes multiple logical services (for example, virtual port
+80 and 443 on the same destination key).
+
+Pass the remote virtual port in the destination string as `destination:port`.
+The local `FROM_PORT` is optional.
+
+```go
+// Remote TO_PORT=443 (from addr), explicit local FROM_PORT=12345
+conn, err := garlic.DialToPort("tcp", "example.b32.i2p:443", 12345)
+if err != nil {
+	log.Fatal(err)
+}
+defer conn.Close()
+
+// Remote TO_PORT=443, local FROM_PORT selected once at random and reused
+conn2, err := garlic.DialToPort("tcp", "example.b32.i2p:443")
+```
+
+For HTTP clients, adapt `DialContextToPort` into `http.Transport.DialContext`:
+
+```go
+transport := &http.Transport{
+	DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+		// addr from net/http is already host:port, e.g. "example.b32.i2p:443"
+		return garlic.DialContextToPort(ctx, network, addr)
+	},
+}
+client := &http.Client{Transport: transport}
+```
+
+Plain `Dial()` and `DialContext()` continue to use the default behavior (`FROM_PORT=0`, `TO_PORT=0`).
+
 ### Tor(Onion) Usage:
 
 When using it to manage a Tor session, set up an `onramp.Onion`
