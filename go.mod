@@ -4,7 +4,7 @@ go 1.26.3
 
 require (
 	github.com/cretz/bine v0.2.0
-	github.com/go-i2p/go-sam-bridge v0.1.61
+	github.com/go-i2p/go-sam-bridge v0.1.62
 	github.com/go-i2p/go-sam-go v0.33.1-0.20260411195601-326503e35a5c
 	github.com/go-i2p/i2pkeys v0.33.92
 	github.com/go-i2p/logger v0.1.60000-0.20260612012503-bec4044a2b0d
@@ -20,12 +20,12 @@ require (
 	github.com/go-i2p/common v0.1.60000-0.20260612012818-ffa84716e922 // indirect
 	github.com/go-i2p/crypto v0.1.60000-0.20260612012729-bcf561943886 // indirect
 	github.com/go-i2p/elgamal v0.1.59999 // indirect
-	github.com/go-i2p/go-datagrams v0.1.61 // indirect
+	github.com/go-i2p/go-datagrams v0.1.62 // indirect
 	github.com/go-i2p/go-i2cp v0.1.60000-0.20260612013604-6be0e753d2c7 // indirect
-	github.com/go-i2p/go-i2p v0.1.61 // indirect
-	github.com/go-i2p/go-nat-listener v0.0.0-20260402222111-bfda0025cb1b // indirect
+	github.com/go-i2p/go-i2p v0.1.62 // indirect
+	github.com/go-i2p/go-nat-listener v0.1.62 // indirect
 	github.com/go-i2p/go-noise v0.1.60000-0.20260624210455-c5cd198c4109 // indirect
-	github.com/go-i2p/go-streaming v0.1.61 // indirect
+	github.com/go-i2p/go-streaming v0.1.62 // indirect
 	github.com/go-i2p/go-unzip v0.0.0-20260417162122-21146ed7aca8 // indirect
 	github.com/go-i2p/noise v1.1.1-0.20260612013029-6d1ef3427561 // indirect
 	github.com/go-i2p/path v0.1.60000-0.20260612012938-437d7ee74b3a // indirect
@@ -49,7 +49,7 @@ require (
 	github.com/subosito/gotenv v1.6.0 // indirect
 	go.opentelemetry.io/otel v1.44.0 // indirect
 	go.opentelemetry.io/otel/trace v1.44.0 // indirect
-	go.step.sm/crypto v0.84.0 // indirect
+	go.step.sm/crypto v0.84.1 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/crypto v0.53.0 // indirect
 	golang.org/x/net v0.56.0 // indirect
